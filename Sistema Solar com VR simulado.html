@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Solar VR</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 100;
+            max-width: 300px;
+            transition: opacity 0.3s;
+        }
+        
+        #vr-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+        
+        #vr-button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+        
+        #vr-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .vr-mode {
+            background: linear-gradient(45deg, #FF4757, #FF6B6B) !important;
+        }
+        
+        .vr-crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.3s;
+            box-shadow: 0 0 10px white;
+        }
+        
+        .vr-crosshair.active {
+            opacity: 1;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>🚀 Sistema Solar VR</h3>
+        <p>Explore os planetas em realidade virtual!</p>
+        <p><strong>Desktop:</strong> Use mouse para rotacionar</p>
+        <p><strong>Modo VR:</strong> WASD para mover, mouse para olhar</p>
+    </div>
+    
+    <div id="controls">
+        <p>⌨️ Controles VR:</p>
+        <p>• WASD: Mover</p>
+        <p>• Mouse: Olhar ao redor</p>
+        <p>• Espaço/Shift: Subir/Descer</p>
+        <p>• Clique para travar cursor</p>
+    </div>
+    
+    <button id="vr-button">Modo VR Simulado</button>
+    <div class="vr-crosshair" id="crosshair"></div>
+
+    <script>
+        // Variáveis globais
+        let scene, camera, renderer, vrButton;
+        let planets = [];
+        let sun;
+        let isVRSupported = false;
+        let vrMode = false;
+        let vrControls = {
+            moveSpeed: 0.1,
+            rotationSpeed: 0.002
+        };
+        let keys = {};
+
+        // Configuração inicial
+        init();
+        animate();
+
+        function init() {
+            // Criar cena
+            scene = new THREE.Scene();
+            
+            // Configurar câmera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 20);
+            
+            // Configurar renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+            
+            // Verificar suporte VR
+            checkVRSupport();
+            
+            // Criar o sistema solar
+            createSolarSystem();
+            
+            // Adicionar luzes
+            addLights();
+            
+            // Adicionar controles de mouse
+            addMouseControls();
+            
+            // Redimensionamento
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function checkVRSupport() {
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    isVRSupported = supported;
+                    setupVRButton();
+                });
+            } else {
+                setupVRButton();
+            }
+        }
+
+        function setupVRButton() {
+            const vrButton = document.getElementById('vr-button');
+            
+            // Sempre habilitar o modo VR simulado
+            vrButton.textContent = 'Modo VR Simulado';
+            vrButton.onclick = toggleSimulatedVR;
+            vrButton.disabled = false;
+        }
+
+        function toggleSimulatedVR() {
+            const vrButton = document.getElementById('vr-button');
+            const crosshair = document.getElementById('crosshair');
+            const info = document.getElementById('info');
+            const controls = document.getElementById('controls');
+            
+            vrMode = !vrMode;
+            
+            if (vrMode) {
+                // Ativar modo VR simulado
+                vrButton.textContent = 'Sair do VR';
+                vrButton.classList.add('vr-mode');
+                crosshair.classList.add('active');
+                
+                // Ocultar interface
+                info.style.opacity = '0.3';
+                controls.style.opacity = '0.8';
+                
+                // Posicionar câmera para experiência VR
+                camera.position.set(0, 2, 15);
+                camera.lookAt(0, 0, 0);
+                
+                // Adicionar controles VR
+                addVRControls();
+                
+            } else {
+                // Desativar modo VR simulado
+                vrButton.textContent = 'Modo VR Simulado';
+                vrButton.classList.remove('vr-mode');
+                crosshair.classList.remove('active');
+                
+                // Mostrar interface
+                info.style.opacity = '1';
+                controls.style.opacity = '1';
+                
+                // Remover controles VR
+                removeVRControls();
+                
+                // Resetar posição da câmera
+                camera.position.set(0, 5, 20);
+                camera.rotation.set(0, 0, 0);
+                camera.lookAt(0, 0, 0);
+            }
+        }
+
+        function addVRControls() {
+            // Controles de teclado
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            
+            // Controles de mouse para olhar ao redor
+            document.addEventListener('mousemove', onVRMouseMove);
+            document.addEventListener('click', onVRClick);
+        }
+
+        function removeVRControls() {
+            document.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('keyup', onKeyUp);
+            document.removeEventListener('mousemove', onVRMouseMove);
+            document.removeEventListener('click', onVRClick);
+            
+            // Liberar cursor
+            if (document.exitPointerLock) {
+                document.exitPointerLock();
+            }
+        }
+
+        function onKeyDown(event) {
+            keys[event.code] = true;
+        }
+
+        function onKeyUp(event) {
+            keys[event.code] = false;
+        }
+
+        function onVRMouseMove(event) {
+            if (!vrMode) return;
+            
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+            
+            // Rotacionar câmera baseado no movimento do mouse
+            camera.rotation.y -= movementX * vrControls.rotationSpeed;
+            camera.rotation.x -= movementY * vrControls.rotationSpeed;
+            
+            // Limitar rotação vertical
+            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+        }
+
+        function onVRClick() {
+            if (vrMode && document.body.requestPointerLock) {
+                document.body.requestPointerLock();
+            }
+        }
+
+        function updateVRMovement() {
+            if (!vrMode) return;
+            
+            const direction = new THREE.Vector3();
+            
+            // Movimento baseado na direção da câmera
+            if (keys['KeyW']) {
+                camera.getWorldDirection(direction);
+                camera.position.add(direction.multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['KeyS']) {
+                camera.getWorldDirection(direction);
+                camera.position.add(direction.multiplyScalar(-vrControls.moveSpeed));
+            }
+            if (keys['KeyA']) {
+                camera.getWorldDirection(direction);
+                const left = new THREE.Vector3().crossVectors(camera.up, direction);
+                camera.position.add(left.normalize().multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['KeyD']) {
+                camera.getWorldDirection(direction);
+                const right = new THREE.Vector3().crossVectors(direction, camera.up);
+                camera.position.add(right.normalize().multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['Space']) {
+                camera.position.y += vrControls.moveSpeed;
+            }
+            if (keys['ShiftLeft']) {
+                camera.position.y -= vrControls.moveSpeed;
+            }
+        }
+
+        function createSolarSystem() {
+            // Criar fundo estrelado
+            createStarField();
+            
+            // Criar o Sol
+            const sunGeometry = new THREE.SphereGeometry(2, 32, 32);
+            const sunMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFFD700,
+                emissive: 0xFFAA00
+            });
+            sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            scene.add(sun);
+            
+            // Dados dos planetas
+            const planetData = [
+                { name: 'Mercúrio', size: 0.3, distance: 4, color: 0x8C7853, speed: 0.02 },
+                { name: 'Vênus', size: 0.5, distance: 6, color: 0xFFA500, speed: 0.015 },
+                { name: 'Terra', size: 0.6, distance: 8, color: 0x4169E1, speed: 0.01 },
+                { name: 'Marte', size: 0.4, distance: 10, color: 0xFF4500, speed: 0.008 },
+                { name: 'Júpiter', size: 1.2, distance: 15, color: 0xDAA520, speed: 0.005 },
+                { name: 'Saturno', size: 1.0, distance: 18, color: 0xFAD5A5, speed: 0.004 }
+            ];
+            
+            // Criar planetas
+            planetData.forEach((data, index) => {
+                const planet = createPlanet(data);
+                planets.push(planet);
+                scene.add(planet.group);
+            });
+        }
+
+        function createPlanet(data) {
+            const group = new THREE.Group();
+            
+            // Criar órbita visual
+            const orbitGeometry = new THREE.RingGeometry(data.distance - 0.1, data.distance + 0.1, 64);
+            const orbitMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x444444, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.3 
+            });
+            const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+            orbit.rotation.x = -Math.PI / 2;
+            group.add(orbit);
+            
+            // Criar planeta
+            const planetGeometry = new THREE.SphereGeometry(data.size, 32, 32);
+            const planetMaterial = new THREE.MeshLambertMaterial({ color: data.color });
+            const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
+            
+            // Posicionar planeta
+            planetMesh.position.x = data.distance;
+            group.add(planetMesh);
+            
+            // Adicionar anel para Saturno
+            if (data.name === 'Saturno') {
+                const ringGeometry = new THREE.RingGeometry(data.size * 1.2, data.size * 1.8, 32);
+                const ringMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0xC4A484,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = -Math.PI / 2;
+                planetMesh.add(ring);
+            }
+            
+            return {
+                group: group,
+                planet: planetMesh,
+                data: data,
+                angle: Math.random() * Math.PI * 2
+            };
+        }
+
+        function createStarField() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 10000;
+            const positions = new Float32Array(starCount * 3);
+            
+            for (let i = 0; i < starCount * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 2000;
+            }
+            
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const starMaterial = new THREE.PointsMaterial({
+                color: 0xFFFFFF,
+                size: 2
+            });
+            
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+
+        function addLights() {
+            // Luz do sol
+            const sunLight = new THREE.PointLight(0xFFFFFF, 2, 100);
+            sunLight.position.set(0, 0, 0);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+            
+            // Luz ambiente suave
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.1);
+            scene.add(ambientLight);
+        }
+
+        function addMouseControls() {
+            let mouseX = 0, mouseY = 0;
+            let isMouseDown = false;
+            
+            document.addEventListener('mousemove', (event) => {
+                if (!vrMode && !renderer.xr.isPresenting) {
+                    mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+                    mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+                    
+                    if (!isMouseDown) {
+                        camera.position.x = Math.sin(mouseX * Math.PI) * 25;
+                        camera.position.z = Math.cos(mouseX * Math.PI) * 25;
+                        camera.position.y = mouseY * 10 + 5;
+                        camera.lookAt(0, 0, 0);
+                    }
+                }
+            });
+            
+            document.addEventListener('wheel', (event) => {
+                if (!vrMode && !renderer.xr.isPresenting) {
+                    const distance = camera.position.length();
+                    const newDistance = Math.max(5, Math.min(50, distance + event.deltaY * 0.01));
+                    camera.position.normalize().multiplyScalar(newDistance);
+                }
+            });
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+            // Atualizar movimento VR
+            updateVRMovement();
+            
+            // Rotacionar o sol
+            sun.rotation.y += 0.005;
+            
+            // Animar planetas
+            planets.forEach((planet) => {
+                planet.angle += planet.data.speed;
+                planet.planet.position.x = Math.cos(planet.angle) * planet.data.distance;
+                planet.planet.position.z = Math.sin(planet.angle) * planet.data.distance;
+                planet.planet.rotation.y += 0.01;
+            });
+            
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
