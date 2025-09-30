@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Solar VR</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 100;
+            max-width: 300px;
+            transition: opacity 0.3s;
+        }
+        
+        #vr-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+        
+        #vr-button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+        
+        #vr-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .vr-mode {
+            background: linear-gradient(45deg, #FF4757, #FF6B6B) !important;
+        }
+        
+        .vr-crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: white;
+            border-radius: 50%;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.3s;
+            box-shadow: 0 0 10px white;
+        }
+        
+        .vr-crosshair.active {
+            opacity: 1;
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            transition: opacity 0.3s;
+        }
+        
+        #planet-info {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background: rgba(0,0,0,0.85);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 60;
+            width: 280px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            border: 2px solid #4CAF50;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        #planet-info.visible {
+            opacity: 1;
+        }
+        
+        #planet-info h2 {
+            margin: 0 0 8px 0;
+            color: #4CAF50;
+            font-size: 18px;
+        }
+        
+        #planet-info p {
+            margin: 4px 0;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>🚀 Sistema Solar VR</h3>
+        <p>Explore os planetas em realidade virtual!</p>
+        <p><strong>Desktop:</strong> Use mouse para rotacionar</p>
+        <p><strong>Modo VR:</strong> WASD para mover, mouse para olhar</p>
+    </div>
+    
+    <div id="controls">
+        <p>⌨️ Controles VR:</p>
+        <p>• WASD: Mover</p>
+        <p>• Mouse: Olhar ao redor</p>
+        <p>• Espaço/Shift: Subir/Descer</p>
+        <p>• Clique para travar cursor</p>
+    </div>
+    
+    <div id="planet-info">
+        <h2 id="planet-name"></h2>
+        <p id="planet-description"></p>
+        <p id="planet-distance"></p>
+        <p id="planet-size"></p>
+        <p id="planet-orbital"></p>
+        <p id="planet-day"></p>
+        <p id="planet-moons"></p>
+        <p id="planet-curiosity"></p>
+    </div>
+    
+    <button id="vr-button">Modo VR Simulado</button>
+    <div class="vr-crosshair" id="crosshair"></div>
+
+    <script>
+        // Variáveis globais
+        let scene, camera, renderer, vrButton;
+        let planets = [];
+        let sun;
+        let isVRSupported = false;
+        let vrMode = false;
+        let vrControls = {
+            moveSpeed: 0.1,
+            rotationSpeed: 0.002
+        };
+        let keys = {};
+        let raycaster, mouse;
+        let planetInfoTimer = null;
+        let currentPlanetName = null;
+
+        // Configuração inicial
+        init();
+        animate();
+
+        function init() {
+            // Criar cena
+            scene = new THREE.Scene();
+            
+            // Configurar câmera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 20);
+            
+            // Configurar renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+            
+            // Inicializar raycaster
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            // Verificar suporte VR
+            checkVRSupport();
+            
+            // Criar o sistema solar
+            createSolarSystem();
+            
+            // Adicionar luzes
+            addLights();
+            
+            // Adicionar controles de mouse
+            addMouseControls();
+            
+            // Redimensionamento
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function checkVRSupport() {
+            if ('xr' in navigator) {
+                navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                    isVRSupported = supported;
+                    setupVRButton();
+                });
+            } else {
+                setupVRButton();
+            }
+        }
+
+        function setupVRButton() {
+            const vrButton = document.getElementById('vr-button');
+            
+            // Sempre habilitar o modo VR simulado
+            vrButton.textContent = 'Modo VR Simulado';
+            vrButton.onclick = toggleSimulatedVR;
+            vrButton.disabled = false;
+        }
+
+        function toggleSimulatedVR() {
+            const vrButton = document.getElementById('vr-button');
+            const crosshair = document.getElementById('crosshair');
+            const info = document.getElementById('info');
+            const controls = document.getElementById('controls');
+            
+            vrMode = !vrMode;
+            
+            if (vrMode) {
+                // Ativar modo VR simulado
+                vrButton.textContent = 'Sair do VR';
+                vrButton.classList.add('vr-mode');
+                crosshair.classList.add('active');
+                
+                // Ocultar interface
+                info.style.opacity = '0.3';
+                controls.style.opacity = '0.8';
+                
+                // Posicionar câmera para experiência VR
+                camera.position.set(0, 2, 15);
+                camera.lookAt(0, 0, 0);
+                
+                // Adicionar controles VR
+                addVRControls();
+                
+            } else {
+                // Desativar modo VR simulado
+                vrButton.textContent = 'Modo VR Simulado';
+                vrButton.classList.remove('vr-mode');
+                crosshair.classList.remove('active');
+                
+                // Mostrar interface
+                info.style.opacity = '1';
+                controls.style.opacity = '1';
+                
+                // Remover controles VR
+                removeVRControls();
+                
+                // Resetar posição da câmera
+                camera.position.set(0, 5, 20);
+                camera.rotation.set(0, 0, 0);
+                camera.lookAt(0, 0, 0);
+                
+                // Ocultar info do planeta
+                document.getElementById('planet-info').classList.remove('visible');
+            }
+        }
+
+        function addVRControls() {
+            // Controles de teclado
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            
+            // Controles de mouse para olhar ao redor
+            document.addEventListener('mousemove', onVRMouseMove);
+            document.addEventListener('click', onVRClick);
+        }
+
+        function removeVRControls() {
+            document.removeEventListener('keydown', onKeyDown);
+            document.removeEventListener('keyup', onKeyUp);
+            document.removeEventListener('mousemove', onVRMouseMove);
+            document.removeEventListener('click', onVRClick);
+            
+            // Liberar cursor
+            if (document.exitPointerLock) {
+                document.exitPointerLock();
+            }
+        }
+
+        function onKeyDown(event) {
+            keys[event.code] = true;
+        }
+
+        function onKeyUp(event) {
+            keys[event.code] = false;
+        }
+
+        function onVRMouseMove(event) {
+            if (!vrMode) return;
+            
+            const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+            const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+            
+            // Rotacionar câmera baseado no movimento do mouse
+            camera.rotation.y -= movementX * vrControls.rotationSpeed;
+            camera.rotation.x -= movementY * vrControls.rotationSpeed;
+            
+            // Limitar rotação vertical
+            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+        }
+
+        function onVRClick() {
+            if (vrMode && document.body.requestPointerLock) {
+                document.body.requestPointerLock();
+            }
+        }
+
+        function updateVRMovement() {
+            if (!vrMode) return;
+            
+            const direction = new THREE.Vector3();
+            
+            // Movimento baseado na direção da câmera
+            if (keys['KeyW']) {
+                camera.getWorldDirection(direction);
+                camera.position.add(direction.multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['KeyS']) {
+                camera.getWorldDirection(direction);
+                camera.position.add(direction.multiplyScalar(-vrControls.moveSpeed));
+            }
+            if (keys['KeyA']) {
+                camera.getWorldDirection(direction);
+                const left = new THREE.Vector3().crossVectors(camera.up, direction);
+                camera.position.add(left.normalize().multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['KeyD']) {
+                camera.getWorldDirection(direction);
+                const right = new THREE.Vector3().crossVectors(direction, camera.up);
+                camera.position.add(right.normalize().multiplyScalar(vrControls.moveSpeed));
+            }
+            if (keys['Space']) {
+                camera.position.y += vrControls.moveSpeed;
+            }
+            if (keys['ShiftLeft']) {
+                camera.position.y -= vrControls.moveSpeed;
+            }
+        }
+
+        function createSolarSystem() {
+            // Criar fundo estrelado
+            createStarField();
+            
+            // Criar o Sol
+            const sunGeometry = new THREE.SphereGeometry(2, 32, 32);
+            const sunMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xFFD700,
+                emissive: 0xFFAA00
+            });
+            sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            
+            // Adicionar dados ao Sol
+            sun.userData = {
+                name: 'Sol',
+                description: 'A estrela no centro do nosso Sistema Solar',
+                realDistance: 'Centro do Sistema Solar',
+                realSize: 'Diâmetro: 1.392.700 km',
+                orbitalPeriod: 'N/A',
+                dayLength: 'Rotação: ~25 dias terrestres',
+                moons: 'Planetas: 8',
+                curiosity: '⭐ O Sol contém 99,86% de toda a massa do Sistema Solar e poderia conter mais de 1 milhão de Terras!'
+            };
+            
+            scene.add(sun);
+            
+            // Dados dos planetas
+            const planetData = [
+                { 
+                    name: 'Mercúrio', 
+                    size: 0.3, 
+                    distance: 4, 
+                    color: 0x8C7853, 
+                    speed: 0.01,
+                    description: 'O menor e mais próximo planeta do Sol',
+                    realDistance: '57,9 milhões de km do Sol',
+                    realSize: 'Diâmetro: 4.879 km',
+                    orbitalPeriod: 'Ano: 88 dias terrestres',
+                    dayLength: 'Dia: 59 dias terrestres',
+                    moons: 'Luas: 0',
+                    curiosity: '🌡️ As temperaturas variam de -173°C à noite a 427°C durante o dia!'
+                },
+                { 
+                    name: 'Vênus', 
+                    size: 0.5, 
+                    distance: 6, 
+                    color: 0xFFA500, 
+                    speed: 0.0075,
+                    description: 'O planeta mais quente do Sistema Solar',
+                    realDistance: '108,2 milhões de km do Sol',
+                    realSize: 'Diâmetro: 12.104 km',
+                    orbitalPeriod: 'Ano: 225 dias terrestres',
+                    dayLength: 'Dia: 243 dias terrestres',
+                    moons: 'Luas: 0',
+                    curiosity: '🔥 Sua temperatura chega a 465°C devido ao efeito estufa extremo. Vênus gira ao contrário!'
+                },
+                { 
+                    name: 'Terra', 
+                    size: 0.6, 
+                    distance: 8, 
+                    color: 0x4169E1, 
+                    speed: 0.005,
+                    description: 'Nosso lar, o único planeta com vida conhecida',
+                    realDistance: '149,6 milhões de km do Sol',
+                    realSize: 'Diâmetro: 12.742 km',
+                    orbitalPeriod: 'Ano: 365,25 dias',
+                    dayLength: 'Dia: 24 horas',
+                    moons: 'Luas: 1 (Lua)',
+                    curiosity: '🌍 70% da superfície é coberta por água. É o único lugar conhecido no universo com vida!'
+                },
+                { 
+                    name: 'Marte', 
+                    size: 0.4, 
+                    distance: 10, 
+                    color: 0xFF4500, 
+                    speed: 0.004,
+                    description: 'O planeta vermelho, alvo de exploração futura',
+                    realDistance: '227,9 milhões de km do Sol',
+                    realSize: 'Diâmetro: 6.779 km',
+                    orbitalPeriod: 'Ano: 687 dias terrestres',
+                    dayLength: 'Dia: 24,6 horas',
+                    moons: 'Luas: 2 (Fobos e Deimos)',
+                    curiosity: '🔴 Sua cor vermelha vem do óxido de ferro. Tem o maior vulcão do Sistema Solar: Monte Olimpo!'
+                },
+                { 
+                    name: 'Júpiter', 
+                    size: 1.2, 
+                    distance: 15, 
+                    color: 0xDAA520, 
+                    speed: 0.0025,
+                    description: 'O maior planeta do Sistema Solar',
+                    realDistance: '778,5 milhões de km do Sol',
+                    realSize: 'Diâmetro: 139.820 km',
+                    orbitalPeriod: 'Ano: 12 anos terrestres',
+                    dayLength: 'Dia: 10 horas',
+                    moons: 'Luas: 95 conhecidas',
+                    curiosity: '🌪️ A Grande Mancha Vermelha é uma tempestade maior que a Terra que dura há 400 anos!'
+                },
+                { 
+                    name: 'Saturno', 
+                    size: 1.0, 
+                    distance: 18, 
+                    color: 0xFAD5A5, 
+                    speed: 0.002,
+                    description: 'Famoso por seus belos anéis',
+                    realDistance: '1,4 bilhão de km do Sol',
+                    realSize: 'Diâmetro: 116.460 km',
+                    orbitalPeriod: 'Ano: 29 anos terrestres',
+                    dayLength: 'Dia: 10,7 horas',
+                    moons: 'Luas: 146 conhecidas',
+                    curiosity: '💍 Seus anéis são feitos de bilhões de pedaços de gelo e rocha. Saturno é tão leve que flutuaria na água!'
+                }
+            ];
+            
+            // Criar planetas
+            planetData.forEach((data, index) => {
+                const planet = createPlanet(data);
+                planets.push(planet);
+                scene.add(planet.group);
+            });
+        }
+
+        function createPlanet(data) {
+            const group = new THREE.Group();
+            
+            // Criar órbita visual
+            const orbitGeometry = new THREE.RingGeometry(data.distance - 0.1, data.distance + 0.1, 64);
+            const orbitMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x444444, 
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.3 
+            });
+            const orbit = new THREE.Mesh(orbitGeometry, orbitMaterial);
+            orbit.rotation.x = -Math.PI / 2;
+            group.add(orbit);
+            
+            // Criar planeta
+            const planetGeometry = new THREE.SphereGeometry(data.size, 32, 32);
+            const planetMaterial = new THREE.MeshLambertMaterial({ color: data.color });
+            const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
+            
+            // Adicionar dados ao planeta para identificação
+            planetMesh.userData = {
+                name: data.name,
+                description: data.description,
+                realDistance: data.realDistance,
+                realSize: data.realSize,
+                orbitalPeriod: data.orbitalPeriod,
+                dayLength: data.dayLength,
+                moons: data.moons,
+                curiosity: data.curiosity
+            };
+            
+            // Posicionar planeta
+            planetMesh.position.x = data.distance;
+            group.add(planetMesh);
+            
+            // Adicionar a Lua para a Terra
+            if (data.name === 'Terra') {
+                const moonGeometry = new THREE.SphereGeometry(data.size * 0.27, 16, 16);
+                const moonMaterial = new THREE.MeshLambertMaterial({ color: 0xAAAAAA });
+                const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+                
+                // Adicionar dados à Lua
+                moon.userData = {
+                    name: 'Lua',
+                    description: 'O único satélite natural da Terra',
+                    realDistance: '384.400 km da Terra',
+                    realSize: 'Diâmetro: 3.474 km',
+                    orbitalPeriod: 'Órbita: 27,3 dias terrestres',
+                    dayLength: 'Rotação: 27,3 dias (sincronizada)',
+                    moons: 'Satélite da Terra',
+                    curiosity: '🌙 A Lua sempre mostra a mesma face para a Terra! Ela se afasta 3,8 cm por ano.'
+                };
+                
+                moon.position.x = data.size * 2;
+                planetMesh.add(moon);
+            }
+            
+            // Adicionar anel para Saturno
+            if (data.name === 'Saturno') {
+                const ringGeometry = new THREE.RingGeometry(data.size * 1.2, data.size * 1.8, 32);
+                const ringMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0xC4A484,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                ring.rotation.x = -Math.PI / 2;
+                planetMesh.add(ring);
+            }
+            
+            return {
+                group: group,
+                planet: planetMesh,
+                data: data,
+                angle: Math.random() * Math.PI * 2
+            };
+        }
+
+        function createStarField() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 10000;
+            const positions = new Float32Array(starCount * 3);
+            
+            for (let i = 0; i < starCount * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 2000;
+            }
+            
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            
+            const starMaterial = new THREE.PointsMaterial({
+                color: 0xFFFFFF,
+                size: 0.5
+            });
+            
+            const stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+        }
+
+        function addLights() {
+            // Luz do sol
+            const sunLight = new THREE.PointLight(0xFFFFFF, 2, 100);
+            sunLight.position.set(0, 0, 0);
+            sunLight.castShadow = true;
+            scene.add(sunLight);
+            
+            // Luz ambiente suave
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.1);
+            scene.add(ambientLight);
+        }
+
+        function addMouseControls() {
+            let mouseX = 0, mouseY = 0;
+            let isMouseDown = false;
+            
+            document.addEventListener('mousemove', (event) => {
+                if (!vrMode && !renderer.xr.isPresenting) {
+                    mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+                    mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+                    
+                    if (!isMouseDown) {
+                        camera.position.x = Math.sin(mouseX * Math.PI) * 25;
+                        camera.position.z = Math.cos(mouseX * Math.PI) * 25;
+                        camera.position.y = mouseY * 10 + 5;
+                        camera.lookAt(0, 0, 0);
+                    }
+                }
+            });
+            
+            document.addEventListener('wheel', (event) => {
+                if (!vrMode && !renderer.xr.isPresenting) {
+                    const distance = camera.position.length();
+                    const newDistance = Math.max(5, Math.min(50, distance + event.deltaY * 0.01));
+                    camera.position.normalize().multiplyScalar(newDistance);
+                }
+            });
+        }
+
+        function checkPlanetIntersection() {
+            if (!vrMode) return;
+            
+            // Raycaster no centro da tela (onde está o crosshair)
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            
+            // Coletar todos os meshes dos planetas e o Sol
+            const planetMeshes = planets.map(p => p.planet);
+            const allObjects = [...planetMeshes, sun];
+            
+            // Verificar interseções
+            const intersects = raycaster.intersectObjects(allObjects, true);
+            
+            const planetInfo = document.getElementById('planet-info');
+            
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object;
+                
+                // Procurar o objeto com userData (pode ser o mesh ou seu pai)
+                let targetObject = intersectedObject;
+                while (targetObject && !targetObject.userData.name) {
+                    targetObject = targetObject.parent;
+                }
+                
+                if (targetObject && targetObject.userData.name) {
+                    // Exibir informações imediatamente
+                    document.getElementById('planet-name').textContent = targetObject.userData.name;
+                    document.getElementById('planet-description').textContent = targetObject.userData.description;
+                    document.getElementById('planet-distance').textContent = '📏 ' + targetObject.userData.realDistance;
+                    document.getElementById('planet-size').textContent = '🌍 ' + targetObject.userData.realSize;
+                    document.getElementById('planet-orbital').textContent = '🔄 ' + targetObject.userData.orbitalPeriod;
+                    document.getElementById('planet-day').textContent = '⏰ ' + targetObject.userData.dayLength;
+                    document.getElementById('planet-moons').textContent = '🌙 ' + targetObject.userData.moons;
+                    document.getElementById('planet-curiosity').textContent = targetObject.userData.curiosity;
+                    planetInfo.classList.add('visible');
+                    
+                    currentPlanetName = targetObject.userData.name;
+                    
+                    // Limpar timer anterior
+                    if (planetInfoTimer) {
+                        clearTimeout(planetInfoTimer);
+                    }
+                }
+            } else {
+                // Quando sair do planeta, manter visível por 5 segundos
+                if (planetInfo.classList.contains('visible') && !planetInfoTimer) {
+                    planetInfoTimer = setTimeout(() => {
+                        planetInfo.classList.remove('visible');
+                        currentPlanetName = null;
+                        planetInfoTimer = null;
+                    }, 5000);
+                }
+            }
+        }
+
+        function animate() {
+            renderer.setAnimationLoop(render);
+        }
+
+        function render() {
+            // Atualizar movimento VR
+            updateVRMovement();
+            
+            // Verificar interseção com planetas
+            checkPlanetIntersection();
+            
+            // Rotacionar o sol
+            sun.rotation.y += 0.002;
+            
+            // Animar planetas
+            planets.forEach((planet) => {
+                planet.angle += planet.data.speed;
+                planet.planet.position.x = Math.cos(planet.angle) * planet.data.distance;
+                planet.planet.position.z = Math.sin(planet.angle) * planet.data.distance;
+                planet.planet.rotation.y += 0.005;
+            });
+            
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
