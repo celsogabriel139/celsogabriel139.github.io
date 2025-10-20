@@ -12,6 +12,9 @@
             background: #000;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
         
         #info {
@@ -25,6 +28,24 @@
             z-index: 100;
             max-width: 300px;
             transition: opacity 0.3s;
+        }
+        
+        @media (max-width: 768px) {
+            #info {
+                font-size: 12px;
+                padding: 10px;
+                max-width: 200px;
+            }
+            
+            #info h3 {
+                font-size: 14px;
+                margin: 0 0 5px 0;
+            }
+            
+            #info p {
+                margin: 3px 0;
+                font-size: 11px;
+            }
         }
         
         #vr-button {
@@ -41,6 +62,16 @@
             font-weight: bold;
             z-index: 100;
             transition: all 0.3s;
+            touch-action: manipulation;
+        }
+        
+        @media (max-width: 768px) {
+            #vr-button {
+                bottom: 10px;
+                right: 10px;
+                padding: 10px 20px;
+                font-size: 14px;
+            }
         }
         
         #vr-button:hover {
@@ -88,6 +119,96 @@
             transition: opacity 0.3s;
         }
         
+        @media (max-width: 768px) {
+            #controls {
+                display: none;
+            }
+        }
+        
+        #mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 11px;
+            text-align: center;
+            z-index: 100;
+        }
+        
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: block;
+            }
+        }
+        
+        .joystick-container {
+            display: none;
+            position: absolute;
+            bottom: 100px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            z-index: 100;
+        }
+        
+        .joystick-container.active {
+            display: block;
+        }
+        
+        .joystick-base {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            position: absolute;
+        }
+        
+        .joystick-stick {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(76, 175, 80, 0.8);
+            border: 3px solid rgba(76, 175, 80, 1);
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            transition: all 0.1s;
+        }
+        
+        .action-buttons {
+            display: none;
+            position: absolute;
+            bottom: 100px;
+            right: 30px;
+            z-index: 100;
+        }
+        
+        .action-buttons.active {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .action-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(76, 175, 80, 0.8);
+            border: 3px solid rgba(76, 175, 80, 1);
+            color: white;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+        
         #planet-info {
             position: absolute;
             top: 10px;
@@ -104,6 +225,28 @@
             border: 2px solid #4CAF50;
             max-height: 400px;
             overflow-y: auto;
+        }
+        
+        @media (max-width: 768px) {
+            #planet-info {
+                width: calc(100vw - 40px);
+                max-width: 300px;
+                top: auto;
+                bottom: 90px;
+                right: 50%;
+                transform: translateX(50%);
+                max-height: 250px;
+                font-size: 12px;
+                padding: 12px;
+            }
+            
+            #planet-info h2 {
+                font-size: 16px;
+            }
+            
+            #planet-info p {
+                font-size: 11px;
+            }
         }
         
         #planet-info.visible {
@@ -139,6 +282,23 @@
         <p>• Clique para travar cursor</p>
     </div>
     
+    <div id="mobile-controls">
+        <p>📱 <strong>Modo VR Mobile</strong></p>
+        <p>Mova o celular para olhar • Joystick para navegar</p>
+    </div>
+    
+    <!-- Joystick virtual para mobile -->
+    <div class="joystick-container" id="joystick">
+        <div class="joystick-base"></div>
+        <div class="joystick-stick" id="joystick-stick"></div>
+    </div>
+    
+    <!-- Botões de ação para mobile -->
+    <div class="action-buttons" id="action-buttons">
+        <div class="action-btn" id="btn-up">↑</div>
+        <div class="action-btn" id="btn-down">↓</div>
+    </div>
+    
     <div id="planet-info">
         <h2 id="planet-name"></h2>
         <p id="planet-description"></p>
@@ -168,6 +328,15 @@
         let raycaster, mouse;
         let planetInfoTimer = null;
         let currentPlanetName = null;
+        
+        // Variáveis para mobile
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let joystickActive = false;
+        let joystickVector = { x: 0, y: 0 };
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
+        let orientationPermission = false;
 
         // Configuração inicial
         init();
@@ -194,6 +363,11 @@
             
             // Verificar suporte VR
             checkVRSupport();
+            
+            // Setup controles mobile
+            if (isMobile) {
+                setupMobileControls();
+            }
             
             // Criar o sistema solar
             createSolarSystem();
@@ -227,12 +401,151 @@
             vrButton.onclick = toggleSimulatedVR;
             vrButton.disabled = false;
         }
+        
+        // Funções para Mobile
+        function setupMobileControls() {
+            if (!isMobile) return;
+            
+            // Setup joystick
+            const joystick = document.getElementById('joystick');
+            const stick = document.getElementById('joystick-stick');
+            
+            joystick.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                joystickActive = true;
+            });
+            
+            joystick.addEventListener('touchmove', (e) => {
+                if (!joystickActive) return;
+                e.preventDefault();
+                
+                const touch = e.touches[0];
+                const rect = joystick.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                let deltaX = touch.clientX - centerX;
+                let deltaY = touch.clientY - centerY;
+                
+                const maxDistance = 35;
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                
+                if (distance > maxDistance) {
+                    deltaX = (deltaX / distance) * maxDistance;
+                    deltaY = (deltaY / distance) * maxDistance;
+                }
+                
+                joystickVector.x = deltaX / maxDistance;
+                joystickVector.y = deltaY / maxDistance;
+                
+                stick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            });
+            
+            joystick.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                joystickActive = false;
+                joystickVector = { x: 0, y: 0 };
+                stick.style.transform = 'translate(0, 0)';
+            });
+            
+            // Setup action buttons
+            const btnUp = document.getElementById('btn-up');
+            const btnDown = document.getElementById('btn-down');
+            
+            btnUp.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys['Space'] = true;
+            });
+            
+            btnUp.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys['Space'] = false;
+            });
+            
+            btnDown.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys['ShiftLeft'] = true;
+            });
+            
+            btnDown.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys['ShiftLeft'] = false;
+            });
+        }
+        
+        async function requestOrientationPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && 
+                typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        orientationPermission = true;
+                        setupDeviceOrientation();
+                    }
+                } catch (error) {
+                    console.log('Orientation permission denied');
+                }
+            } else {
+                // Para dispositivos que não precisam de permissão
+                orientationPermission = true;
+                setupDeviceOrientation();
+            }
+        }
+        
+        function setupDeviceOrientation() {
+            window.addEventListener('deviceorientation', (event) => {
+                if (!vrMode) return;
+                
+                deviceOrientation.alpha = event.alpha || 0;
+                deviceOrientation.beta = event.beta || 0;
+                deviceOrientation.gamma = event.gamma || 0;
+                
+                // Aplicar rotação à câmera
+                const alphaRad = THREE.MathUtils.degToRad(deviceOrientation.alpha);
+                const betaRad = THREE.MathUtils.degToRad(deviceOrientation.beta);
+                const gammaRad = THREE.MathUtils.degToRad(deviceOrientation.gamma);
+                
+                camera.rotation.y = -alphaRad;
+                camera.rotation.x = betaRad - Math.PI / 2;
+                camera.rotation.z = gammaRad;
+            });
+        }
+        
+        function updateMobileMovement() {
+            if (!vrMode || !isMobile) return;
+            
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            
+            // Movimento baseado no joystick
+            if (joystickVector.x !== 0 || joystickVector.y !== 0) {
+                // Frente/Trás
+                const forward = direction.clone().multiplyScalar(-joystickVector.y * vrControls.moveSpeed);
+                camera.position.add(forward);
+                
+                // Esquerda/Direita
+                const right = new THREE.Vector3().crossVectors(direction, camera.up);
+                const side = right.multiplyScalar(joystickVector.x * vrControls.moveSpeed);
+                camera.position.add(side);
+            }
+            
+            // Subir/Descer com botões
+            if (keys['Space']) {
+                camera.position.y += vrControls.moveSpeed;
+            }
+            if (keys['ShiftLeft']) {
+                camera.position.y -= vrControls.moveSpeed;
+            }
+        }
 
         function toggleSimulatedVR() {
             const vrButton = document.getElementById('vr-button');
             const crosshair = document.getElementById('crosshair');
             const info = document.getElementById('info');
             const controls = document.getElementById('controls');
+            const joystick = document.getElementById('joystick');
+            const actionButtons = document.getElementById('action-buttons');
+            const mobileControls = document.getElementById('mobile-controls');
             
             vrMode = !vrMode;
             
@@ -245,6 +558,20 @@
                 // Ocultar interface
                 info.style.opacity = '0.3';
                 controls.style.opacity = '0.8';
+                
+                // Mostrar controles mobile
+                if (isMobile) {
+                    joystick.classList.add('active');
+                    actionButtons.classList.add('active');
+                    mobileControls.style.opacity = '1';
+                    
+                    // Solicitar permissão de orientação
+                    if (!orientationPermission) {
+                        requestOrientationPermission();
+                    }
+                } else {
+                    mobileControls.style.opacity = '0';
+                }
                 
                 // Posicionar câmera para experiência VR
                 camera.position.set(0, 2, 15);
@@ -262,6 +589,13 @@
                 // Mostrar interface
                 info.style.opacity = '1';
                 controls.style.opacity = '1';
+                
+                // Ocultar controles mobile
+                if (isMobile) {
+                    joystick.classList.remove('active');
+                    actionButtons.classList.remove('active');
+                    mobileControls.style.opacity = '0';
+                }
                 
                 // Remover controles VR
                 removeVRControls();
@@ -307,7 +641,7 @@
         }
 
         function onVRMouseMove(event) {
-            if (!vrMode) return;
+            if (!vrMode || isMobile) return;
             
             const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
             const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
@@ -321,7 +655,7 @@
         }
 
         function onVRClick() {
-            if (vrMode && document.body.requestPointerLock) {
+            if (vrMode && !isMobile && document.body.requestPointerLock) {
                 document.body.requestPointerLock();
             }
         }
@@ -647,8 +981,8 @@
                     // Exibir informações imediatamente
                     document.getElementById('planet-name').textContent = targetObject.userData.name;
                     document.getElementById('planet-description').textContent = targetObject.userData.description;
-                    document.getElementById('planet-distance').textContent = '📏 ' + targetObject.userData.realDistance;
-                    document.getElementById('planet-size').textContent = '🌍 ' + targetObject.userData.realSize;
+                    document.getElementById('planet-distance').textContent = '📍 ' + targetObject.userData.realDistance;
+                    document.getElementById('planet-size').textContent = '🌐 ' + targetObject.userData.realSize;
                     document.getElementById('planet-orbital').textContent = '🔄 ' + targetObject.userData.orbitalPeriod;
                     document.getElementById('planet-day').textContent = '⏰ ' + targetObject.userData.dayLength;
                     document.getElementById('planet-moons').textContent = '🌙 ' + targetObject.userData.moons;
@@ -680,7 +1014,11 @@
 
         function render() {
             // Atualizar movimento VR
-            updateVRMovement();
+            if (isMobile) {
+                updateMobileMovement();
+            } else {
+                updateVRMovement();
+            }
             
             // Verificar interseção com planetas
             checkPlanetIntersection();
