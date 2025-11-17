@@ -3,357 +3,315 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Sistema Solar VR - WebXR</title>
-
-    <!-- Three.js r128 (compatível com muitos exemplos) -->
+    <title>Sistema Solar VR - Completo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
         #container { width: 100%; height: 100vh; position: relative; }
 
-        #ui-overlay {
-            position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,0.6); color: #fff; padding: 12px; border-radius: 8px; z-index: 20; max-width: 360px; font-size: 13px;
-        }
-
-        #enter-vr { position: absolute; right: 12px; top: 12px; z-index: 30; padding: 10px 14px; background: linear-gradient(45deg,#4CAF50,#2E7D32); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        #enter-vr.hidden { display: none; }
-
-        #planet-info-dom {
-            position: absolute; right: 12px; bottom: 12px; z-index: 30; width: 320px; background: rgba(0,0,0,0.7); color: #fff; border-radius: 10px; padding: 12px; display: none;
-        }
-        #planet-info-dom h3 { margin: 0 0 6px 0; color: #FFEB3B; }
-        #planet-info-dom p { margin: 6px 0; font-size: 13px; line-height: 1.3; }
-
-        .hint { font-size: 12px; opacity: 0.9; }
-
-        /* small helper for development so you can see the reticle on a 2D screen */
-        #reticle-2d { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 10px; height: 10px; background: white; border-radius: 50%; opacity: 0.85; z-index: 10; pointer-events: none; display: none; }
-
-        .button-secondary { background: linear-gradient(45deg,#9C27B0,#E91E63); border: none; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
-
-        #info-floating { position: absolute; left: 12px; bottom: 12px; z-index: 30; color: #fff; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; font-size: 13px; }
+        #ui { position: absolute; left: 12px; top: 12px; z-index: 40; color: #fff; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; max-width: 360px; font-size: 13px; }
+        #enter-vr { position: absolute; right: 12px; top: 12px; z-index: 40; padding: 10px 14px; background: linear-gradient(45deg,#4CAF50,#2E7D32); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #info-panel { position: absolute; right: 12px; bottom: 12px; z-index: 40; width: 320px; background: rgba(0,0,0,0.75); color: #fff; border-radius: 10px; padding: 12px; display: none; }
+        #info-panel h3 { margin: 0 0 6px 0; color: #FFD54F }
+        #reticle-2d { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 8px; height: 8px; background: rgba(255,255,255,0.9); border-radius: 50%; z-index: 30; pointer-events: none; display: none; }
+        #loading { position:absolute; left:50%; top:50%; transform: translate(-50%,-50%); z-index:50; color:#fff; background:rgba(0,0,0,0.7); padding:12px; border-radius:8px; }
     </style>
 </head>
 <body>
-    <div id="container"></div>
+<div id="container"></div>
+<div id="ui">🚀 <strong>Sistema Solar VR</strong><div style="font-size:12px;opacity:0.9;margin-top:6px">Use um headset compatível com WebXR ou teste no desktop. Mire com a cabeça para ver informações.</div></div>
+<button id="enter-vr">Entrar em VR</button>
+<div id="info-panel">
+    <h3 id="ip-name">Planeta</h3>
+    <p id="ip-desc">Descrição</p>
+    <p id="ip-meta">—</p>
+    <div style="margin-top:8px;"><button id="ip-close">Fechar</button></div>
+</div>
+<div id="reticle-2d"></div>
+<div id="loading">Carregando Sistema Solar...</div>
 
-    <div id="ui-overlay">
-        <strong>🚀 Sistema Solar VR — Modo WebXR</strong>
-        <div class="hint">Use um óculos VR compatível com WebXR (Ex: Meta Quest via navegador compatível) ou testar no desktop com WebXR-emulation.</div>
-        <div style="margin-top:8px; display:flex; gap:8px;">
-            <button id="enter-vr" class="button-secondary">Entrar em VR</button>
-            <button id="show-2d-reticle">Mostrar mira 2D</button>
-        </div>
-    </div>
+<script>
+// Sistema Solar completo para WebXR + mira (marcador na fronte) + Lua + painel informativo
 
-    <div id="planet-info-dom">
-        <h3 id="pname">Planeta</h3>
-        <p id="pdesc">Descrição</p>
-        <p id="pmeta">—</p>
-        <div style="display:flex; gap:8px; margin-top:8px;"><button id="close-info" class="button-secondary">Fechar</button></div>
-    </div>
+const container = document.getElementById('container');
+const infoPanel = document.getElementById('info-panel');
+const ipName = document.getElementById('ip-name');
+const ipDesc = document.getElementById('ip-desc');
+const ipMeta = document.getElementById('ip-meta');
+const ipClose = document.getElementById('ip-close');
+const reticle2d = document.getElementById('reticle-2d');
+const loading = document.getElementById('loading');
 
-    <div id="info-floating">Olhe para um planeta (mire com a cabeça). A marca (ponto) na sua testa aponta para o que você olhou.</div>
-    <div id="reticle-2d"></div>
+ipClose.addEventListener('click', () => { infoPanel.style.display = 'none'; });
 
-    <script>
-    // Versão atualizada: WebXR + mira fixa (marca na fronte) + painel info 3D/DOM
+// Renderer + XR
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+container.appendChild(renderer.domElement);
 
-    let container = document.getElementById('container');
-    let scene = new THREE.Scene();
-    let renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true; // Habilita WebXR
-    container.appendChild(renderer.domElement);
+// Cena e câmera
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(0, 5, 40); // Começar fora do sistema para ver tudo
 
-    // Camera "regular" usada para não-XR (preview)
-    let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 1.6, 6);
+// Grupo central para o sistema (facilita rotacionar tudo devagar)
+const systemGroup = new THREE.Group();
+scene.add(systemGroup);
 
-    // Um grupo para representar o 'head' — serve para adicionar a marca na fronte
-    const head = new THREE.Group();
-    head.position.set(0, 1.6, 0);
-    scene.add(head);
+// Marca na fronte: um pequeno objeto que fica sempre um pouco em frente ao usuário
+const head = new THREE.Group();
+scene.add(head);
+head.position.set(0, 1.6, 0);
+const forehead = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ffcc, emissive: 0x00ffcc }));
+forehead.position.set(0, 0, -0.12);
+head.add(forehead);
 
-    // Marca (ponto) na fronte — sempre fica um pouco à frente da cabeça
-    const foreheadMarkerGeo = new THREE.SphereGeometry(0.02, 8, 8);
-    const foreheadMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00FFCC, emissive: 0x00FFCC });
-    const foreheadMarker = new THREE.Mesh(foreheadMarkerGeo, foreheadMarkerMat);
-    foreheadMarker.position.set(0, 0, -0.12); // está frente ao "olho"
-    head.add(foreheadMarker);
+// Reticle 3D que aparece sobre o planeta quando olhamos para ele
+const retGeo = new THREE.RingGeometry(0.12, 0.17, 32);
+const retMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true });
+const gazeReticle = new THREE.Mesh(retGeo, retMat);
+gazeReticle.rotation.x = -Math.PI/2;
+gazeReticle.visible = false;
+scene.add(gazeReticle);
 
-    // Um pequeno retículo 3D (visível no mundo) — o marcador apontará para o planeta e vai se posicionar sobre ele quando houver intersecção
-    const gazeReticleGeo = new THREE.RingGeometry(0.06, 0.09, 32);
-    const gazeReticleMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
-    const gazeReticle = new THREE.Mesh(gazeReticleGeo, gazeReticleMat);
-    gazeReticle.rotation.x = -Math.PI/2;
-    gazeReticle.visible = false;
-    scene.add(gazeReticle);
+// Luzes
+const ambient = new THREE.AmbientLight(0x666666, 0.6);
+scene.add(ambient);
+const sunLight = new THREE.PointLight(0xffffff, 2.2, 1000);
+scene.add(sunLight);
 
-    // Luzes
-    scene.add(new THREE.HemisphereLight(0x8888ff, 0x222233, 0.6));
-    const sunLight = new THREE.PointLight(0xFFFFFF, 2, 200);
-    scene.add(sunLight);
+// Sol
+const sunGeom = new THREE.SphereGeometry(3, 64, 64);
+const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD54F });
+const sun = new THREE.Mesh(sunGeom, sunMat);
+sun.userData = { name: 'Sol', description: 'Estrela do nosso sistema.', meta: 'Massa: 1.989×10^30 kg' };
+systemGroup.add(sun);
 
-    // Sol
-    const sunGeo = new THREE.SphereGeometry(1.2, 32, 32);
-    const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD54F });
-    const sun = new THREE.Mesh(sunGeo, sunMat);
-    sun.userData = { name: 'Sol', description: 'A estrela central do Sistema Solar', curiosity: 'Contém 99.86% da massa do Sistema Solar.' };
-    scene.add(sun);
+// Planetas com Lua
+const planets = [];
+const defs = [
+    { name: 'Mercúrio', size: 0.3, dist: 7, color: 0x8C7853, speed: 0.012, desc: 'Menor planeta.' , meta: 'Dist: 57,9M km'},
+    { name: 'Vênus', size: 0.6, dist: 10, color: 0xD98B3B, speed: 0.008, desc: 'Planeta quente e denso.' , meta: 'Dist: 108M km'},
+    { name: 'Terra', size: 0.65, dist: 14, color: 0x2E86FF, speed: 0.006, desc: 'Nosso lar.' , meta: 'Dist: 149,6M km'},
+    { name: 'Marte', size: 0.45, dist: 18, color: 0xFF4500, speed: 0.005, desc: 'Planeta vermelho.' , meta: 'Dist: 227,9M km'},
+    { name: 'Júpiter', size: 1.4, dist: 24, color: 0xD4A017, speed: 0.0035, desc: 'O maior planeta.' , meta: 'Dist: 778,5M km'},
+    { name: 'Saturno', size: 1.1, dist: 30, color: 0xEFD5A5, speed: 0.0028, desc: 'Anéis impressionantes.' , meta: 'Dist: 1,4B km'}
+];
 
-    // Planetas (dados reduzidos e estilizados — você pode ampliar)
-    const planets = [];
-    const planetDefs = [
-        { name: 'Mercúrio', size: 0.12, distance: 6, color: 0x8C7853, speed: 0.012, desc: 'Menor planeta.' , meta: 'Dist: 57,9M km • Dia: 59 dias'},
-        { name: 'Vênus', size: 0.2, distance: 9, color: 0xFFA500, speed: 0.009, desc: 'Planeta extremamente quente.' , meta: 'Dist: 108M km • Dia: 243 dias'},
-        { name: 'Terra', size: 0.21, distance: 12, color: 0x2E86FF, speed: 0.007, desc: 'Nosso lar, com vida.', meta: 'Dist: 149M km • Lua: 1'},
-        { name: 'Marte', size: 0.16, distance: 15, color: 0xFF4500, speed: 0.006, desc: 'O planeta vermelho.', meta: 'Dist: 228M km • Lua: 2'},
-        { name: 'Júpiter', size: 0.45, distance: 21, color: 0xD4A017, speed: 0.004, desc: 'Gigante gasoso.', meta: 'Dist: 778M km • Muitas luas'},
-        { name: 'Saturno', size: 0.38, distance: 27, color: 0xEFD5A5, speed: 0.003, desc: 'Conhecido por seus anéis.', meta: 'Dist: 1,4B km • Anéis visíveis'}
-    ];
+// criar órbitas e planetas
+defs.forEach((d, i) => {
+    const orbit = new THREE.RingGeometry(d.dist - 0.02, d.dist + 0.02, 128);
+    const orbitMesh = new THREE.Mesh(orbit, new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide, transparent: true, opacity: 0.25 }));
+    orbitMesh.rotation.x = -Math.PI/2;
+    systemGroup.add(orbitMesh);
 
-    planetDefs.forEach(d => {
-        const g = new THREE.Group();
-        const geo = new THREE.SphereGeometry(d.size, 32, 32);
-        const mat = new THREE.MeshStandardMaterial({ color: d.color, roughness: 0.8 });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(d.distance, 0, 0);
-        mesh.userData = { name: d.name, description: d.desc, curiosity: d.meta };
+    const planetGeo = new THREE.SphereGeometry(d.size, 32, 32);
+    const planetMat = new THREE.MeshStandardMaterial({ color: d.color, roughness: 0.8, metalness: 0.1 });
+    const planet = new THREE.Mesh(planetGeo, planetMat);
+    planet.position.set(d.dist, 0, 0);
+    planet.userData = { name: d.name, description: d.desc, meta: d.meta };
+    systemGroup.add(planet);
 
-        // Órbita visual
-        const orbitGeo = new THREE.RingGeometry(d.distance - 0.01, d.distance + 0.01, 64);
-        const orbitMat = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
-        const orbit = new THREE.Mesh(orbitGeo, orbitMat);
-        orbit.rotation.x = -Math.PI/2;
-        scene.add(orbit);
+    // Anéis para Saturno
+    if (d.name === 'Saturno') {
+        const ringGeo = new THREE.RingGeometry(d.size * 1.4, d.size * 2.2, 64);
+        const ringMat = new THREE.MeshStandardMaterial({ color: 0xC4A484, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI/2;
+        ring.position.copy(planet.position);
+        systemGroup.add(ring);
+    }
 
-        g.add(mesh);
-        scene.add(g);
-        planets.push({ group: g, mesh: mesh, def: d, angle: Math.random() * Math.PI * 2 });
+    planets.push({ mesh: planet, def: d, angle: Math.random() * Math.PI * 2 });
+});
+
+// Lua da Terra: criamos um grupo orbital para a Terra e adicionamos a lua
+const earthObj = planets.find(p => p.def.name === 'Terra');
+let moon = null;
+if (earthObj) {
+    const moonGeo = new THREE.SphereGeometry(0.18, 16, 16);
+    const moonMat = new THREE.MeshStandardMaterial({ color: 0xAAAAAA });
+    moon = new THREE.Mesh(moonGeo, moonMat);
+    // posicionar inicialmente perto da Terra
+    moon.position.set(earthObj.def.dist + 1.2, 0, 0);
+    moon.userData = { name: 'Lua', description: 'Satélite natural da Terra.', meta: 'Dist: 384.400 km' };
+    systemGroup.add(moon);
+}
+
+// Fundo de estrelas (skybox simples pontilhado)
+const starGeo = new THREE.BufferGeometry();
+const starCount = 5000;
+const positions = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount * 3; i++) positions[i] = (Math.random() - 0.5) * 2000;
+starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.5 }));
+scene.add(stars);
+
+// Raycaster para detectar o que a testa está olhando
+const raycaster = new THREE.Raycaster();
+
+// Função que atualiza posições orbitais e rotação lenta do sistema
+function updateSystem(delta) {
+    // girar todo o sistema lentamente para dar sensação de movimento
+    systemGroup.rotation.y += 0.02 * delta; // rotação global lenta
+
+    // órbitas individuais
+    planets.forEach(p => {
+        p.angle += p.def.speed * delta * 60; // ajustar velocidade
+        const x = Math.cos(p.angle) * p.def.dist;
+        const z = Math.sin(p.angle) * p.def.dist;
+        p.mesh.position.set(x, 0, z);
+        p.mesh.rotation.y += 0.002 * delta * 60;
     });
 
-    // Raycaster (usado para detectar o que a cabeça está olhando)
-    const raycaster = new THREE.Raycaster();
-    const tempVec = new THREE.Vector3();
+    // lua orbita a Terra
+    if (moon && earthObj) {
+        // encontrar posição da Terra
+        const earthPos = earthObj.mesh.position.clone();
+        const moonAngle = performance.now() * 0.0006; // velocidade da lua
+        const mx = earthPos.x + Math.cos(moonAngle) * 1.2;
+        const mz = earthPos.z + Math.sin(moonAngle) * 1.2;
+        moon.position.set(mx, 0, mz);
+        moon.rotation.y += 0.01;
+    }
+}
 
-    // DOM Info
-    const planetInfoDOM = document.getElementById('planet-info-dom');
-    const pname = document.getElementById('pname');
-    const pdesc = document.getElementById('pdesc');
-    const pmeta = document.getElementById('pmeta');
-    document.getElementById('close-info').addEventListener('click', () => { planetInfoDOM.style.display = 'none'; });
+// Função que faz raycast a partir do ponto da testa (forehead)
+let lastIntersection = null;
+let hideInfoTimeout = null;
+function updateGaze() {
+    let origin = new THREE.Vector3();
+    let dir = new THREE.Vector3(0,0,-1);
 
-    // Pequeno helper para mostrar reticle 2d (útil para visualização em desktop)
-    const reticle2d = document.getElementById('reticle-2d');
-    document.getElementById('show-2d-reticle').addEventListener('click', () => { reticle2d.style.display = (reticle2d.style.display === 'none') ? 'block' : 'none'; });
+    if (renderer.xr.isPresenting) {
+        const xrCamera = renderer.xr.getCamera();
+        // usar a primeira sub-câmera para origem
+        origin.setFromMatrixPosition(xrCamera.cameras[0].matrixWorld);
+        const quat = new THREE.Quaternion();
+        xrCamera.cameras[0].getWorldQuaternion(quat);
+        dir.set(0,0,-1).applyQuaternion(quat);
+        // também sincronizar o 'head' group para que o marcador apareça corretamente no mundo
+        head.position.copy(origin);
+        head.quaternion.copy(quat);
+    } else {
+        // fallback: usar câmera regular + head alinhado
+        origin.copy(camera.position);
+        dir.set(0,0,-1).applyQuaternion(camera.quaternion);
+        head.position.copy(camera.position);
+        head.quaternion.copy(camera.quaternion);
+    }
 
-    // Animação de órbitas
-    function updateOrbits(delta) {
-        planets.forEach(p => {
-            p.angle += p.def.speed * delta * 60; // ajuste de velocidade
-            const x = Math.cos(p.angle) * p.def.distance;
-            const z = Math.sin(p.angle) * p.def.distance;
-            p.mesh.position.set(x, 0, z);
-            // girando o próprio planeta
-            p.mesh.rotation.y += 0.01;
+    raycaster.set(origin, dir);
+    const targets = planets.map(p => p.mesh).concat([sun]);
+    if (moon) targets.push(moon);
+    const hits = raycaster.intersectObjects(targets, false);
+
+    if (hits.length > 0) {
+        const it = hits[0];
+        lastIntersection = it;
+        // posicionar reticle 3D sobre o ponto
+        gazeReticle.position.copy(it.point);
+        gazeReticle.visible = true;
+        // mostrar DOM info imediatamente
+        const ud = it.object.userData || {};
+        if (ud.name) {
+            ipName.textContent = ud.name;
+            ipDesc.textContent = ud.description || '';
+            ipMeta.textContent = ud.meta || '';
+            infoPanel.style.display = 'block';
+            // manter info visível enquanto olhar
+            if (hideInfoTimeout) { clearTimeout(hideInfoTimeout); hideInfoTimeout = null; }
+        }
+    } else {
+        gazeReticle.visible = false;
+        // se não houver interseção, esconder painel após um curto tempo
+        if (!hideInfoTimeout && infoPanel.style.display === 'block') {
+            hideInfoTimeout = setTimeout(() => { infoPanel.style.display = 'none'; hideInfoTimeout = null; }, 1500);
+        }
+    }
+}
+
+// Botão Entrar em VR
+const enterBtn = document.getElementById('enter-vr');
+async function initXR() {
+    if (navigator.xr) {
+        const supported = await navigator.xr.isSessionSupported('immersive-vr');
+        if (!supported) { enterBtn.textContent = 'VR não suportado'; enterBtn.disabled = true; return; }
+        enterBtn.addEventListener('click', async () => {
+            try {
+                const session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'] });
+                renderer.xr.setSession(session);
+            } catch (err) {
+                alert('Falha ao iniciar VR: ' + err.message);
+            }
         });
-        sun.rotation.y += 0.002 * delta * 60;
+    } else {
+        enterBtn.textContent = 'WebXR não disponível'; enterBtn.disabled = true;
     }
+}
+initXR();
 
-    // Função que calcula onde o marcador na fronte está apontando
-    function updateGazeInteraction() {
-        // A posição "olho" real em world-space — usamos gerenciador XR quando em sessão
-        let xrCamera = renderer.xr.getCamera();
-        let origin = new THREE.Vector3();
-        let dir = new THREE.Vector3(0,0,-1);
-
-        if (renderer.xr.isPresenting) {
-            // xrCamera é um ArrayCamera; pegar a câmera principal (0)
-            origin.setFromMatrixPosition(xrCamera.cameras[0].matrixWorld);
-            // Direção: usar a rotação do head group (aqui assumimos que o head está alinhado com a câmera XR local)
-            const camQuaternion = new THREE.Quaternion();
-            xrCamera.cameras[0].getWorldQuaternion(camQuaternion);
-            dir.applyQuaternion(camQuaternion);
+// Controller select (opcional): ao apertar gatilho, fixamos/ocultamos info
+const controller = renderer.xr.getController(0);
+controller.addEventListener('select', () => {
+    if (lastIntersection) {
+        // alterna fixo do painel
+        if (infoPanel.dataset.locked === 'true') {
+            infoPanel.style.display = 'none';
+            infoPanel.dataset.locked = 'false';
         } else {
-            // fallback desktop: usar camera normal
-            origin.copy(head.getWorldPosition(new THREE.Vector3()));
-            const quat = head.getWorldQuaternion(new THREE.Quaternion());
-            dir.set(0,0,-1).applyQuaternion(quat);
-        }
-
-        raycaster.set(origin, dir);
-        const meshes = planets.map(p => p.mesh).concat([sun]);
-        const intersects = raycaster.intersectObjects(meshes, false);
-
-        if (intersects.length > 0) {
-            const it = intersects[0];
-            // Posicionar reticle 3D sobre a superfície do objeto intersectado
-            gazeReticle.position.copy(it.point);
-            gazeReticle.visible = true;
-
-            // Mostrar o painel DOM com informações
-            const ud = it.object.userData;
-            if (ud && ud.name) {
-                pname.textContent = ud.name;
-                pdesc.textContent = ud.description || '';
-                pmeta.textContent = ud.curiosity || '';
-                planetInfoDOM.style.display = 'block';
-            }
-
-            // Realçar o planeta levemente (pequena escala de destaque)
-            it.object.scale.set(1.06,1.06,1.06);
-
-            // posicionar gráfico/indicador — opcional: animate marker to planet
-        } else {
-            gazeReticle.visible = false;
-            // reset highlights
-            planets.forEach(p => p.mesh.scale.set(1,1,1));
-            // oculta DOM info após 1.5s
-            if (planetInfoDOM.style.display === 'block') {
-                // deixamos visível por enquanto; você pode ocultar com timeout se preferir
-            }
+            infoPanel.dataset.locked = 'true';
+            infoPanel.style.display = 'block';
         }
     }
+});
+scene.add(controller);
 
-    // Torna o ponto 'foreheadMarker' seguir a câmera XR automaticamente.
-    // Quando em sessão XR, atualizamos a posição do 'head' para acompanhar a câmera.
-    function syncHeadToXR() {
-        if (renderer.xr.isPresenting) {
-            const xrCam = renderer.xr.getCamera();
-            // Pegar posição do primeiro sub-câmera (esquerdo/direito)
-            const worldPos = new THREE.Vector3();
-            worldPos.setFromMatrixPosition(xrCam.cameras[0].matrixWorld);
-            head.position.copy(worldPos);
-            // Copiar rotação do xr camera para o head
-            const worldQuat = new THREE.Quaternion();
-            xrCam.cameras[0].getWorldQuaternion(worldQuat);
-            head.quaternion.copy(worldQuat);
-        } else {
-            // head segue a 'camera' normal
-            head.position.copy(camera.position);
-            head.quaternion.copy(camera.quaternion);
-        }
-    }
+// Loop principal
+let last = performance.now();
+renderer.setAnimationLoop((now) => {
+    const delta = (now - last) / 1000; last = now;
+    updateSystem(delta);
+    updateGaze();
+    // manter luz do sol em posição do sol
+    sunLight.position.copy(sun.position);
+    renderer.render(scene, camera);
+});
 
-    // Botão "Entrar em VR" — tenta iniciar uma sessão WebXR de imersão
-    const enterVRBtn = document.getElementById('enter-vr');
-    async function initXR() {
-        if (navigator.xr) {
-            const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
-            if (!isSupported) {
-                enterVRBtn.textContent = 'VR não suportado';
-                enterVRBtn.disabled = true;
-                return;
-            }
+// Ajustes de resize
+window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+});
 
-            enterVRBtn.addEventListener('click', async () => {
-                try {
-                    const session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'] });
-                    renderer.xr.setSession(session);
-                } catch (err) {
-                    console.warn('Falha ao iniciar sessão XR:', err);
-                    alert('Não foi possível iniciar a sessão VR. Verifique o headset e o navegador.');
-                }
-            });
-        } else {
-            enterVRBtn.textContent = 'WebXR não disponível';
-            enterVRBtn.disabled = true;
-        }
-    }
+// Ativa reticle 2D para teste sem headset
+function updateReticle2D() {
+    if (!renderer.xr.isPresenting) { reticle2d.style.display = 'block'; } else { reticle2d.style.display = 'none'; }
+}
+updateReticle2D();
+renderer.xr.addEventListener('sessionstart', () => { enterBtn.style.display = 'none'; updateReticle2D(); loading.style.display = 'none'; });
+renderer.xr.addEventListener('sessionend', () => { enterBtn.style.display = 'block'; updateReticle2D(); });
 
-    initXR();
+// Remover loading ao terminar setup
+setTimeout(() => { loading.style.display = 'none'; }, 800);
 
-    // Interação: apontar/controlar com o controlador (opcional) — adiciona reticle quando controlador disponível
-    const controller = renderer.xr.getController(0);
-    controller.addEventListener('select', () => {
-        // Ao pressionar o gatilho enquanto olha para um planeta, podemos travar info ou aproximar
-        if (gazeReticle.visible) {
-            // Exemplo: ocultar/mostrar informação DOM já tratado por gaze
-        }
-    });
-    scene.add(controller);
+// Controles mouse para testar em desktop
+let down = false, lx = 0, ly = 0;
+window.addEventListener('pointerdown', (e) => { down = true; lx = e.clientX; ly = e.clientY; });
+window.addEventListener('pointerup', () => { down = false; });
+window.addEventListener('pointermove', (e) => {
+    if (!down || renderer.xr.isPresenting) return;
+    const dx = (e.clientX - lx) * 0.002; const dy = (e.clientY - ly) * 0.002;
+    camera.rotation.y -= dx; camera.rotation.x -= dy;
+    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+    lx = e.clientX; ly = e.clientY;
+});
 
-    // Resize handler
-    window.addEventListener('resize', () => {
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-    });
-
-    // loop principal — usando renderer.setAnimationLoop para compatibilidade XR
-    let lastTime = performance.now();
-    renderer.setAnimationLoop((time) => {
-        const delta = (time - lastTime) / 1000;
-        lastTime = time;
-
-        // atualizar órbitas
-        updateOrbits(delta);
-
-        // sincronizar head com câmera XR (manter a marca na fronte alinhada)
-        syncHeadToXR();
-
-        // raycast a partir do ponto de vista da "testa" / cabeça
-        updateGazeInteraction();
-
-        // render
-        if (renderer.xr.isPresenting) {
-            renderer.render(scene, camera); // quando em XR, o renderer substitui a câmera automaticamente
-        } else {
-            renderer.render(scene, camera);
-        }
-    });
-
-    // Mostrar reticle 2D para testes em desktop
-    // O reticle 2D fica no centro da tela — replicando olhando com a testa
-    function updateReticle2DVisibility() {
-        // se não estiver em XR, mostra o reticle 2D por conveniência
-        if (!renderer.xr.isPresenting) {
-            document.getElementById('show-2d-reticle').style.display = 'inline-block';
-        } else {
-            document.getElementById('show-2d-reticle').style.display = 'none';
-        }
-    }
-    updateReticle2DVisibility();
-
-    // Ativar pequenos controles (mouse) para testar sem óculos
-    let isPointerDown = false;
-    let lastX = 0, lastY = 0;
-    window.addEventListener('pointerdown', (e) => { isPointerDown = true; lastX = e.clientX; lastY = e.clientY; });
-    window.addEventListener('pointerup', () => { isPointerDown = false; });
-    window.addEventListener('pointermove', (e) => {
-        if (!isPointerDown || renderer.xr.isPresenting) return;
-        const dx = (e.clientX - lastX) * 0.002;
-        const dy = (e.clientY - lastY) * 0.002;
-        camera.rotation.y -= dx;
-        camera.rotation.x -= dy;
-        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-        lastX = e.clientX; lastY = e.clientY;
-    });
-
-    // DEBUG: Exibir posição inicial dos objetos no console (útil para desenvolvimento)
-    console.log('Planetas inicializados:', planets.map(p => p.mesh.userData.name));
-
-    // Ao entrar/sair de sessão XR, ajustar UI e visibilidade do reticle 2D
-    renderer.xr.addEventListener('sessionstart', () => {
-        enterVRBtn.classList.add('hidden');
-        document.getElementById('info-floating').style.display = 'none';
-        reticle2d.style.display = 'none';
-    });
-    renderer.xr.addEventListener('sessionend', () => {
-        enterVRBtn.classList.remove('hidden');
-        document.getElementById('info-floating').style.display = 'block';
-        updateReticle2DVisibility();
-    });
-
-    // Acessibilidade: permitir foco no planeta por clique no DOM (útil para desktop)
-    document.getElementById('ui-overlay').addEventListener('click', (e) => {
-        // placeholder
-    });
-
-    </script>
+console.log('Sistema Solar pronto.');
+</script>
 </body>
 </html>
