@@ -45,7 +45,9 @@
         #vr-instructions button { margin-top: 20px; padding: 12px 30px; background: #9C27B0; color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 4px 15px rgba(156, 39, 176, 0.4); }
         
         .vr-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 6px; height: 6px; background: white; border-radius: 50%; z-index: 50; opacity: 0; transition: opacity 0.3s; box-shadow: 0 0 15px white; }
-        .vr-crosshair.active { opacity: 0.8; }
+        #planet-info { position: absolute; top: 10px; right: 10px; color: white; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; z-index: 60; width: 280px; display: none; pointer-events: none; border: 2px solid #4CAF50; max-height: 400px; overflow-y: auto; }
+        #planet-info h2 { margin: 0 0 8px 0; color: #4CAF50; font-size: 16px; }
+        #planet-info p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
         
         #orientation-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(156, 39, 176, 0.95); color: white; padding: 30px; border-radius: 15px; z-index: 250; text-align: center; display: none; }
         #orientation-prompt.visible { display: block; }
@@ -64,7 +66,16 @@
         <p><strong>VR Óculos:</strong> Giroscópio + Joystick</p>
     </div>
     
-    <div id="orientation-prompt">
+    <div id="planet-info">
+        <h2 id="planet-name">Planeta</h2>
+        <p id="planet-description">Descrição</p>
+        <p id="planet-distance">Distância</p>
+        <p id="planet-size">Tamanho</p>
+        <p id="planet-orbital">Período</p>
+        <p id="planet-day">Dia</p>
+        <p id="planet-moons">Luas</p>
+        <p id="planet-curiosity">Curiosidade</p>
+    </div>
         <h2 style="margin: 0 0 10px 0;">📱 Permissão Necessária</h2>
         <p>Para usar o giroscópio do VR, precisamos de permissão.</p>
         <button onclick="grantOrientation()">Permitir Giroscópio</button>
@@ -108,6 +119,8 @@
         let eyeSeparation = 0.064;
         let joystickActive = false, joystickVector = { x: 0, y: 0 };
         let orientationPermission = false;
+        let raycaster = new THREE.Raycaster();
+        let planetInfoTimer = null;
 
         init();
         animate();
@@ -227,24 +240,30 @@
         }
         
         function setupDeviceOrientation() {
+            let initialOrientation = null;
+            
             window.addEventListener('deviceorientation', (event) => {
                 if (!stereoMode || !event.alpha) return;
                 
-                const alpha = THREE.MathUtils.degToRad(event.alpha || 0);
+                // Capturar orientação inicial
+                if (!initialOrientation) {
+                    initialOrientation = {
+                        alpha: event.alpha,
+                        beta: event.beta,
+                        gamma: event.gamma
+                    };
+                }
+                
+                // Calcular diferença relativa à posição inicial
+                const alpha = THREE.MathUtils.degToRad((event.alpha - initialOrientation.alpha) || 0);
                 const beta = THREE.MathUtils.degToRad(event.beta || 0);
                 const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
                 
-                const zee = new THREE.Vector3(0, 0, 1);
-                const euler = new THREE.Euler();
-                const q0 = new THREE.Quaternion();
-                const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+                // Criar quaternion para rotação
+                const euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma, 'YXZ');
+                const quat = new THREE.Quaternion().setFromEuler(euler);
                 
-                euler.set(beta, alpha, -gamma, 'YXZ');
-                const quat = new THREE.Quaternion();
-                quat.setFromEuler(euler);
-                quat.multiply(q1);
-                quat.multiply(q0.setFromAxisAngle(zee, 0));
-                
+                // Aplicar rotação às câmeras mantendo suas posições fixas
                 cameraLeft.quaternion.copy(quat);
                 cameraRight.quaternion.copy(quat);
             }, true);
@@ -267,12 +286,21 @@
                 document.getElementById('right-eye').classList.add('active');
                 document.getElementById('stereo-divider').classList.add('active');
                 document.getElementById('info').style.display = 'none';
-                document.getElementById('joystick').classList.add('active');
-                document.getElementById('action-buttons').classList.add('active');
                 
                 const basePos = new THREE.Vector3(0, 5, 20);
-                cameraLeft.position.copy(basePos);
-                cameraRight.position.copy(basePos);
+                
+                // Posições fixas com separação estereoscópica
+                // Câmeras mais próximas e melhor posicionadas
+                cameraLeft.position.set(-eyeSeparation / 2, 2, 12);
+                cameraRight.position.set(eyeSeparation / 2, 2, 12);
+                
+                // Apontar ambas as câmeras para o centro do sistema solar
+                cameraLeft.lookAt(0, 2, 0);
+                cameraRight.lookAt(0, 2, 0);
+                
+                // Garantir que começam com rotação neutra
+                cameraLeft.rotation.order = 'YXZ';
+                cameraRight.rotation.order = 'YXZ';
                 
                 if (!orientationPermission) {
                     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
@@ -290,8 +318,6 @@
                 document.getElementById('right-eye').classList.remove('active');
                 document.getElementById('stereo-divider').classList.remove('active');
                 document.getElementById('info').style.display = 'block';
-                document.getElementById('joystick').classList.remove('active');
-                document.getElementById('action-buttons').classList.remove('active');
                 document.getElementById('vr-instructions').classList.remove('visible');
                 camera.position.set(0, 5, 20);
                 camera.lookAt(0, 0, 0);
@@ -300,33 +326,56 @@
         
         function updateStereoMovement() {
             if (!stereoMode) return;
+            // Cameras ficam fixas - apenas giroscópio controla rotação
+        }
+        
+        function checkStereoIntersection() {
+            if (!stereoMode) return;
             
-            const direction = new THREE.Vector3(0, 0, -1);
-            direction.applyQuaternion(cameraLeft.quaternion);
-            const basePos = cameraLeft.position.clone();
+            const planetInfo = document.getElementById('planet-info');
+            if (!planetInfo) return;
             
-            if (joystickVector.x !== 0 || joystickVector.y !== 0) {
-                const forward = direction.clone();
-                forward.y = 0;
-                forward.normalize();
-                forward.multiplyScalar(-joystickVector.y * moveSpeed);
-                basePos.add(forward);
+            // Usar câmera esquerda para raycasting
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), cameraLeft);
+            const planetMeshes = planets.map(p => p.planet);
+            const allObjects = [...planetMeshes, sun];
+            const intersects = raycaster.intersectObjects(allObjects, true);
+            
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                while (obj && !obj.userData.name) obj = obj.parent;
                 
-                const right = new THREE.Vector3();
-                right.crossVectors(direction, new THREE.Vector3(0, 1, 0));
-                right.normalize();
-                right.multiplyScalar(joystickVector.x * moveSpeed);
-                basePos.add(right);
+                if (obj && obj.userData.name) {
+                    const nameEl = document.getElementById('planet-name');
+                    const descEl = document.getElementById('planet-description');
+                    const distEl = document.getElementById('planet-distance');
+                    const sizeEl = document.getElementById('planet-size');
+                    const orbitalEl = document.getElementById('planet-orbital');
+                    const dayEl = document.getElementById('planet-day');
+                    const moonsEl = document.getElementById('planet-moons');
+                    const curiosityEl = document.getElementById('planet-curiosity');
+                    
+                    if (nameEl) nameEl.textContent = obj.userData.name;
+                    if (descEl) descEl.textContent = obj.userData.description;
+                    if (distEl) distEl.textContent = '📍 ' + obj.userData.realDistance;
+                    if (sizeEl) sizeEl.textContent = '🌐 ' + obj.userData.realSize;
+                    if (orbitalEl) orbitalEl.textContent = '🔄 ' + obj.userData.orbitalPeriod;
+                    if (dayEl) dayEl.textContent = '⏰ ' + obj.userData.dayLength;
+                    if (moonsEl) moonsEl.textContent = '🌙 ' + obj.userData.moons;
+                    if (curiosityEl) curiosityEl.textContent = obj.userData.curiosity;
+                    
+                    planetInfo.style.display = 'block';
+                    
+                    if (planetInfoTimer) clearTimeout(planetInfoTimer);
+                }
+            } else {
+                if (planetInfo.style.display === 'block' && !planetInfoTimer) {
+                    planetInfoTimer = setTimeout(() => {
+                        planetInfo.style.display = 'none';
+                        planetInfoTimer = null;
+                    }, 3000);
+                }
             }
-            
-            if (keys['Space']) basePos.y += moveSpeed * 0.8;
-            if (keys['ShiftLeft']) basePos.y -= moveSpeed * 0.8;
-            
-            const offset = new THREE.Vector3(eyeSeparation / 2, 0, 0);
-            offset.applyQuaternion(cameraLeft.quaternion);
-            
-            cameraLeft.position.copy(basePos).sub(offset);
-            cameraRight.position.copy(basePos).add(offset);
         }
 
         function toggleSimulatedVR() {
@@ -339,7 +388,9 @@
                 btn.classList.add('vr-mode');
                 document.getElementById('crosshair').classList.add('active');
                 document.getElementById('info').style.opacity = '0.3';
-                camera.position.set(0, 2, 15);
+                camera.position.set(0, 5, 15);
+                camera.rotation.set(0, 0, 0);
+                camera.lookAt(0, 0, 0);
                 document.addEventListener('keydown', onKeyDown);
                 document.addEventListener('keyup', onKeyUp);
                 document.addEventListener('mousemove', onVRMouseMove);
@@ -351,12 +402,14 @@
                 btn.classList.remove('vr-mode');
                 document.getElementById('crosshair').classList.remove('active');
                 document.getElementById('info').style.opacity = '1';
+                document.getElementById('planet-info').style.display = 'none';
                 document.removeEventListener('keydown', onKeyDown);
                 document.removeEventListener('keyup', onKeyUp);
                 document.removeEventListener('mousemove', onVRMouseMove);
                 if (document.exitPointerLock) document.exitPointerLock();
                 camera.position.set(0, 5, 20);
                 camera.rotation.set(0, 0, 0);
+                camera.lookAt(0, 0, 0);
             }
         }
 
@@ -381,11 +434,69 @@
             if (keys['ShiftLeft']) camera.position.y -= moveSpeed;
         }
 
+        function checkPlanetIntersection() {
+            if (!vrMode) return;
+            
+            const planetInfo = document.getElementById('planet-info');
+            if (!planetInfo) return; // Verifica se o elemento existe
+            
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const planetMeshes = planets.map(p => p.planet);
+            const allObjects = [...planetMeshes, sun];
+            const intersects = raycaster.intersectObjects(allObjects, true);
+            
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                while (obj && !obj.userData.name) obj = obj.parent;
+                
+                if (obj && obj.userData.name) {
+                    const nameEl = document.getElementById('planet-name');
+                    const descEl = document.getElementById('planet-description');
+                    const distEl = document.getElementById('planet-distance');
+                    const sizeEl = document.getElementById('planet-size');
+                    const orbitalEl = document.getElementById('planet-orbital');
+                    const dayEl = document.getElementById('planet-day');
+                    const moonsEl = document.getElementById('planet-moons');
+                    const curiosityEl = document.getElementById('planet-curiosity');
+                    
+                    if (nameEl) nameEl.textContent = obj.userData.name;
+                    if (descEl) descEl.textContent = obj.userData.description;
+                    if (distEl) distEl.textContent = '📍 ' + obj.userData.realDistance;
+                    if (sizeEl) sizeEl.textContent = '🌐 ' + obj.userData.realSize;
+                    if (orbitalEl) orbitalEl.textContent = '🔄 ' + obj.userData.orbitalPeriod;
+                    if (dayEl) dayEl.textContent = '⏰ ' + obj.userData.dayLength;
+                    if (moonsEl) moonsEl.textContent = '🌙 ' + obj.userData.moons;
+                    if (curiosityEl) curiosityEl.textContent = obj.userData.curiosity;
+                    
+                    planetInfo.style.display = 'block';
+                    
+                    if (planetInfoTimer) clearTimeout(planetInfoTimer);
+                }
+            } else {
+                if (planetInfo.style.display === 'block' && !planetInfoTimer) {
+                    planetInfoTimer = setTimeout(() => {
+                        planetInfo.style.display = 'none';
+                        planetInfoTimer = null;
+                    }, 3000);
+                }
+            }
+        }
+
         function createSolarSystem() {
             createStarField();
             const sunGeo = new THREE.SphereGeometry(2, 32, 32);
             const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, emissive: 0xFFAA00 });
             sun = new THREE.Mesh(sunGeo, sunMat);
+            sun.userData = {
+                name: 'Sol',
+                description: 'A estrela no centro do Sistema Solar',
+                realDistance: 'Centro do Sistema',
+                realSize: '1.392.700 km',
+                orbitalPeriod: 'N/A',
+                dayLength: '~25 dias',
+                moons: '8 planetas',
+                curiosity: '⭐ 99,86% da massa do Sistema Solar!'
+            };
             scene.add(sun);
             
             const planetData = [
@@ -397,7 +508,11 @@
                 { name: 'Saturno', size: 1.0, distance: 18, color: 0xFAD5A5, speed: 0.002, hasRings: true }
             ];
             
-            planetData.forEach(data => { planets.push(createPlanet(data)); scene.add(planets[planets.length - 1].group); });
+            planetData.forEach(data => { 
+                const p = createPlanet(data);
+                planets.push(p); 
+                scene.add(p.group); 
+            });
         }
 
         function createPlanet(data) {
@@ -412,6 +527,29 @@
             const planetMat = new THREE.MeshLambertMaterial({ color: data.color });
             const planetMesh = new THREE.Mesh(planetGeo, planetMat);
             planetMesh.position.x = data.distance;
+            
+            // Dados dos planetas
+            const planetInfo = {
+                'Mercúrio': { desc: 'Menor planeta do Sistema Solar', dist: '57,9 milhões km', size: '4.879 km', orbital: '88 dias', day: '59 dias', moons: '0', curiosity: '🌡️ Varia de -173°C a 427°C!' },
+                'Vênus': { desc: 'O planeta mais quente', dist: '108,2 milhões km', size: '12.104 km', orbital: '225 dias', day: '243 dias', moons: '0', curiosity: '🔥 465°C - efeito estufa extremo!' },
+                'Terra': { desc: 'Nosso lar, único com vida', dist: '149,6 milhões km', size: '12.742 km', orbital: '365,25 dias', day: '24 horas', moons: '1', curiosity: '🌍 70% coberta por água!' },
+                'Marte': { desc: 'O planeta vermelho', dist: '227,9 milhões km', size: '6.779 km', orbital: '687 dias', day: '24,6 horas', moons: '2', curiosity: '🔴 Monte Olimpo - maior vulcão!' },
+                'Júpiter': { desc: 'O maior planeta', dist: '778,5 milhões km', size: '139.820 km', orbital: '12 anos', day: '10 horas', moons: '95', curiosity: '🌪️ Tempestade há 400 anos!' },
+                'Saturno': { desc: 'Famoso pelos anéis', dist: '1,4 bilhão km', size: '116.460 km', orbital: '29 anos', day: '10,7 horas', moons: '146', curiosity: '💍 Flutuaria na água!' }
+            };
+            
+            const info = planetInfo[data.name];
+            planetMesh.userData = {
+                name: data.name,
+                description: info.desc,
+                realDistance: info.dist,
+                realSize: info.size,
+                orbitalPeriod: info.orbital,
+                dayLength: info.day,
+                moons: info.moons,
+                curiosity: info.curiosity
+            };
+            
             group.add(planetMesh);
             
             if (data.hasMoon) {
@@ -419,6 +557,16 @@
                 const moonMat = new THREE.MeshLambertMaterial({ color: 0xAAAAAA });
                 const moon = new THREE.Mesh(moonGeo, moonMat);
                 moon.position.x = data.size * 2;
+                moon.userData = {
+                    name: 'Lua',
+                    description: 'Satélite natural da Terra',
+                    realDistance: '384.400 km',
+                    realSize: '3.474 km',
+                    orbitalPeriod: '27,3 dias',
+                    dayLength: '27,3 dias',
+                    moons: 'Satélite',
+                    curiosity: '🌙 Sempre mostra a mesma face!'
+                };
                 planetMesh.add(moon);
             }
             
@@ -474,6 +622,8 @@
             requestAnimationFrame(animate);
             updateVRMovement();
             updateStereoMovement();
+            checkPlanetIntersection();
+            checkStereoIntersection();
             
             if (!isPaused) {
                 sun.rotation.y += 0.002;
