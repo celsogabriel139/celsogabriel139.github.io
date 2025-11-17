@@ -131,8 +131,8 @@
             camera.position.set(0, 5, 20);
             
             const aspect = window.innerWidth / (2 * window.innerHeight);
-            cameraLeft = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-            cameraRight = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+            cameraLeft = new THREE.PerspectiveCamera(90, aspect, 0.1, 1000);
+            cameraRight = new THREE.PerspectiveCamera(90, aspect, 0.1, 1000);
             cameraLeft.position.set(0, 5, 20);
             cameraRight.position.set(0, 5, 20);
             
@@ -241,11 +241,15 @@
         
         function setupDeviceOrientation() {
             let initialOrientation = null;
+            let isLandscape = window.innerWidth > window.innerHeight;
             
             window.addEventListener('deviceorientation', (event) => {
                 if (!stereoMode || !event.alpha) return;
                 
-                // Capturar orientação inicial
+                // Detectar orientação da tela
+                isLandscape = window.innerWidth > window.innerHeight;
+                
+                // Capturar orientação inicial para referência
                 if (!initialOrientation) {
                     initialOrientation = {
                         alpha: event.alpha,
@@ -254,19 +258,33 @@
                     };
                 }
                 
-                // Calcular diferença relativa à posição inicial
-                const alpha = THREE.MathUtils.degToRad((event.alpha - initialOrientation.alpha) || 0);
+                const alpha = THREE.MathUtils.degToRad(event.alpha || 0);
                 const beta = THREE.MathUtils.degToRad(event.beta || 0);
                 const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
                 
-                // Criar quaternion para rotação
-                const euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma, 'YXZ');
-                const quat = new THREE.Quaternion().setFromEuler(euler);
+                let euler;
                 
-                // Aplicar rotação às câmeras mantendo suas posições fixas
-                cameraLeft.quaternion.copy(quat);
-                cameraRight.quaternion.copy(quat);
+                if (isLandscape) {
+                    // Modo HORIZONTAL (landscape) - girar 90° para compensar
+                    euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma + Math.PI/2, 'YXZ');
+                } else {
+                    // Modo VERTICAL (portrait)
+                    euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma, 'YXZ');
+                }
+                
+                const deviceQuat = new THREE.Quaternion().setFromEuler(euler);
+                
+                // Aplicar às câmeras
+                cameraLeft.quaternion.copy(deviceQuat);
+                cameraRight.quaternion.copy(deviceQuat);
             }, true);
+            
+            // Detectar mudança de orientação da tela
+            window.addEventListener('orientationchange', () => {
+                setTimeout(() => {
+                    initialOrientation = null; // Resetar orientação inicial
+                }, 500);
+            });
         }
         
         function closeInstructions() { 
