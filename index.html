@@ -1,712 +1,359 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistema Solar VR</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Sistema Solar VR - WebXR</title>
+
+    <!-- Three.js r128 (compatível com muitos exemplos) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { margin: 0; padding: 0; background: #000; font-family: Arial, sans-serif; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; position: fixed; width: 100%; height: 100vh; }
-        
-        #info { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px; z-index: 100; max-width: 280px; font-size: 13px; }
-        
-        .button { position: absolute; bottom: 15px; padding: 10px 20px; color: white; border: none; border-radius: 20px; cursor: pointer; font-size: 14px; font-weight: bold; z-index: 100; transition: all 0.3s; touch-action: manipulation; }
-        #vr-button { right: 15px; background: #4CAF50; }
-        #stereo-button { right: 160px; background: #9C27B0; }
-        #pause-button { left: 50%; transform: translateX(-50%); background: #FF9800; }
-        
-        .button:active { transform: scale(0.95); }
-        .vr-mode { background: linear-gradient(45deg, #FF4757, #FF6B6B) !important; }
-        .stereo-mode { background: linear-gradient(45deg, #9C27B0, #E91E63) !important; }
-        .paused { background: #2196F3 !important; }
-        
-        .eye-container { position: absolute; top: 0; width: 50%; height: 100%; display: none; }
-        .eye-container.active { display: block; }
-        #left-eye { left: 0; }
-        #right-eye { right: 0; }
-        
-        .stereo-divider { position: absolute; left: 50%; top: 0; width: 3px; height: 100%; background: #222; z-index: 50; display: none; }
-        .stereo-divider.active { display: block; }
-        
-        .joystick-container { display: none; position: absolute; bottom: 80px; left: 15px; width: 110px; height: 110px; z-index: 100; }
-        .joystick-container.active { display: block; }
-        .joystick-base { width: 110px; height: 110px; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 4px solid rgba(255, 255, 255, 0.4); position: absolute; }
-        .joystick-stick { width: 45px; height: 45px; border-radius: 50%; background: rgba(156, 39, 176, 0.9); border: 4px solid rgba(156, 39, 176, 1); position: absolute; top: 32.5px; left: 32.5px; transition: none; box-shadow: 0 0 15px rgba(156, 39, 176, 0.5); }
-        
-        .action-buttons { display: none; position: absolute; bottom: 80px; right: 15px; z-index: 100; flex-direction: column; gap: 12px; }
-        .action-buttons.active { display: flex; }
-        .action-btn { width: 55px; height: 55px; border-radius: 50%; background: rgba(156, 39, 176, 0.9); border: 4px solid rgba(156, 39, 176, 1); color: white; font-size: 20px; display: flex; align-items: center; justify-content: center; touch-action: manipulation; font-weight: bold; box-shadow: 0 0 15px rgba(156, 39, 176, 0.5); }
-        
-        #vr-instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0, 0, 0, 0.95); color: white; padding: 25px; border-radius: 15px; z-index: 200; text-align: center; display: none; max-width: 85%; border: 2px solid #9C27B0; }
-        #vr-instructions.visible { display: block; }
-        #vr-instructions h2 { color: #9C27B0; margin: 0 0 15px 0; font-size: 20px; }
-        #vr-instructions p { margin: 8px 0; font-size: 14px; line-height: 1.5; }
-        #vr-instructions button { margin-top: 20px; padding: 12px 30px; background: #9C27B0; color: white; border: none; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: bold; box-shadow: 0 4px 15px rgba(156, 39, 176, 0.4); }
-        
-        .vr-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 6px; height: 6px; background: white; border-radius: 50%; z-index: 50; opacity: 0; transition: opacity 0.3s; box-shadow: 0 0 15px white; }
-        #planet-info { position: absolute; top: 10px; right: 10px; color: white; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; z-index: 60; width: 280px; display: none; pointer-events: none; border: 2px solid #4CAF50; max-height: 400px; overflow-y: auto; }
-        #planet-info h2 { margin: 0 0 8px 0; color: #4CAF50; font-size: 16px; }
-        #planet-info p { margin: 4px 0; font-size: 12px; line-height: 1.4; }
-        
-        #orientation-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(156, 39, 176, 0.95); color: white; padding: 30px; border-radius: 15px; z-index: 250; text-align: center; display: none; }
-        #orientation-prompt.visible { display: block; }
-        #orientation-prompt button { margin-top: 15px; padding: 12px 30px; background: white; color: #9C27B0; border: none; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: bold; }
-        
-        @media (max-width: 768px) {
-            #stereo-button { bottom: 70px; right: 15px; }
-            #info { font-size: 11px; padding: 8px; max-width: 200px; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+        #container { width: 100%; height: 100vh; position: relative; }
+
+        #ui-overlay {
+            position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,0.6); color: #fff; padding: 12px; border-radius: 8px; z-index: 20; max-width: 360px; font-size: 13px;
         }
+
+        #enter-vr { position: absolute; right: 12px; top: 12px; z-index: 30; padding: 10px 14px; background: linear-gradient(45deg,#4CAF50,#2E7D32); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #enter-vr.hidden { display: none; }
+
+        #planet-info-dom {
+            position: absolute; right: 12px; bottom: 12px; z-index: 30; width: 320px; background: rgba(0,0,0,0.7); color: #fff; border-radius: 10px; padding: 12px; display: none;
+        }
+        #planet-info-dom h3 { margin: 0 0 6px 0; color: #FFEB3B; }
+        #planet-info-dom p { margin: 6px 0; font-size: 13px; line-height: 1.3; }
+
+        .hint { font-size: 12px; opacity: 0.9; }
+
+        /* small helper for development so you can see the reticle on a 2D screen */
+        #reticle-2d { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 10px; height: 10px; background: white; border-radius: 50%; opacity: 0.85; z-index: 10; pointer-events: none; display: none; }
+
+        .button-secondary { background: linear-gradient(45deg,#9C27B0,#E91E63); border: none; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+
+        #info-floating { position: absolute; left: 12px; bottom: 12px; z-index: 30; color: #fff; background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; font-size: 13px; }
     </style>
 </head>
 <body>
-    <div id="info">
-        <h3 style="margin: 0 0 8px 0;">🚀 Sistema Solar VR</h3>
-        <p><strong>Desktop:</strong> Mouse</p>
-        <p><strong>VR Óculos:</strong> Giroscópio + Joystick</p>
+    <div id="container"></div>
+
+    <div id="ui-overlay">
+        <strong>🚀 Sistema Solar VR — Modo WebXR</strong>
+        <div class="hint">Use um óculos VR compatível com WebXR (Ex: Meta Quest via navegador compatível) ou testar no desktop com WebXR-emulation.</div>
+        <div style="margin-top:8px; display:flex; gap:8px;">
+            <button id="enter-vr" class="button-secondary">Entrar em VR</button>
+            <button id="show-2d-reticle">Mostrar mira 2D</button>
+        </div>
     </div>
-    
-    <div id="planet-info">
-        <h2 id="planet-name">Planeta</h2>
-        <p id="planet-description">Descrição</p>
-        <p id="planet-distance">Distância</p>
-        <p id="planet-size">Tamanho</p>
-        <p id="planet-orbital">Período</p>
-        <p id="planet-day">Dia</p>
-        <p id="planet-moons">Luas</p>
-        <p id="planet-curiosity">Curiosidade</p>
+
+    <div id="planet-info-dom">
+        <h3 id="pname">Planeta</h3>
+        <p id="pdesc">Descrição</p>
+        <p id="pmeta">—</p>
+        <div style="display:flex; gap:8px; margin-top:8px;"><button id="close-info" class="button-secondary">Fechar</button></div>
     </div>
-        <h2 style="margin: 0 0 10px 0;">📱 Permissão Necessária</h2>
-        <p>Para usar o giroscópio do VR, precisamos de permissão.</p>
-        <button onclick="grantOrientation()">Permitir Giroscópio</button>
-    </div>
-    
-    <div id="vr-instructions">
-        <h2>🥽 VR Estereoscópico Ativado!</h2>
-        <p><strong>✓</strong> Coloque o celular nos óculos VR</p>
-        <p><strong>✓</strong> Mova a cabeça para olhar 360°</p>
-        <p><strong>✓</strong> Joystick para navegar pelo espaço</p>
-        <p><strong>✓</strong> Botões ↑↓ para subir/descer</p>
-        <button onclick="closeInstructions()">Começar Agora!</button>
-    </div>
-    
-    <div id="main-container"></div>
-    <div id="left-eye" class="eye-container"></div>
-    <div id="right-eye" class="eye-container"></div>
-    <div class="stereo-divider" id="stereo-divider"></div>
-    
-    <div class="joystick-container" id="joystick">
-        <div class="joystick-base"></div>
-        <div class="joystick-stick" id="joystick-stick"></div>
-    </div>
-    
-    <div class="action-buttons" id="action-buttons">
-        <div class="action-btn" id="btn-up">↑</div>
-        <div class="action-btn" id="btn-down">↓</div>
-    </div>
-    
-    <button class="button" id="stereo-button">🥽 VR Óculos</button>
-    <button class="button" id="vr-button">🎮 VR Simulado</button>
-    <button class="button" id="pause-button">⏸️ Pausar</button>
-    <div class="vr-crosshair" id="crosshair"></div>
+
+    <div id="info-floating">Olhe para um planeta (mire com a cabeça). A marca (ponto) na sua testa aponta para o que você olhou.</div>
+    <div id="reticle-2d"></div>
 
     <script>
-        let scene, camera, renderer, cameraLeft, cameraRight, rendererLeft, rendererRight;
-        let planets = [], sun;
-        let vrMode = false, stereoMode = false, isPaused = false;
-        let moveSpeed = 0.2;
-        let keys = {};
-        let eyeSeparation = 0.064;
-        let joystickActive = false, joystickVector = { x: 0, y: 0 };
-        let orientationPermission = false;
-        let raycaster = new THREE.Raycaster();
-        let planetInfoTimer = null;
+    // Versão atualizada: WebXR + mira fixa (marca na fronte) + painel info 3D/DOM
 
-        init();
-        animate();
+    let container = document.getElementById('container');
+    let scene = new THREE.Scene();
+    let renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true; // Habilita WebXR
+    container.appendChild(renderer.domElement);
 
-        function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 20);
-            
-            const aspect = window.innerWidth / (2 * window.innerHeight);
-            cameraLeft = new THREE.PerspectiveCamera(90, aspect, 0.1, 1000);
-            cameraRight = new THREE.PerspectiveCamera(90, aspect, 0.1, 1000);
-            cameraLeft.position.set(0, 5, 20);
-            cameraRight.position.set(0, 5, 20);
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            document.getElementById('main-container').appendChild(renderer.domElement);
-            
-            rendererLeft = new THREE.WebGLRenderer({ antialias: true });
-            rendererRight = new THREE.WebGLRenderer({ antialias: true });
-            rendererLeft.setSize(window.innerWidth / 2, window.innerHeight);
-            rendererRight.setSize(window.innerWidth / 2, window.innerHeight);
-            rendererLeft.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            rendererRight.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            document.getElementById('left-eye').appendChild(rendererLeft.domElement);
-            document.getElementById('right-eye').appendChild(rendererRight.domElement);
-            
-            setupButtons();
-            setupMobileControls();
-            createSolarSystem();
-            addLights();
-            addMouseControls();
-            
-            window.addEventListener('resize', onWindowResize);
+    // Camera "regular" usada para não-XR (preview)
+    let camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.6, 6);
+
+    // Um grupo para representar o 'head' — serve para adicionar a marca na fronte
+    const head = new THREE.Group();
+    head.position.set(0, 1.6, 0);
+    scene.add(head);
+
+    // Marca (ponto) na fronte — sempre fica um pouco à frente da cabeça
+    const foreheadMarkerGeo = new THREE.SphereGeometry(0.02, 8, 8);
+    const foreheadMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00FFCC, emissive: 0x00FFCC });
+    const foreheadMarker = new THREE.Mesh(foreheadMarkerGeo, foreheadMarkerMat);
+    foreheadMarker.position.set(0, 0, -0.12); // está frente ao "olho"
+    head.add(foreheadMarker);
+
+    // Um pequeno retículo 3D (visível no mundo) — o marcador apontará para o planeta e vai se posicionar sobre ele quando houver intersecção
+    const gazeReticleGeo = new THREE.RingGeometry(0.06, 0.09, 32);
+    const gazeReticleMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true, opacity: 0.9 });
+    const gazeReticle = new THREE.Mesh(gazeReticleGeo, gazeReticleMat);
+    gazeReticle.rotation.x = -Math.PI/2;
+    gazeReticle.visible = false;
+    scene.add(gazeReticle);
+
+    // Luzes
+    scene.add(new THREE.HemisphereLight(0x8888ff, 0x222233, 0.6));
+    const sunLight = new THREE.PointLight(0xFFFFFF, 2, 200);
+    scene.add(sunLight);
+
+    // Sol
+    const sunGeo = new THREE.SphereGeometry(1.2, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD54F });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.userData = { name: 'Sol', description: 'A estrela central do Sistema Solar', curiosity: 'Contém 99.86% da massa do Sistema Solar.' };
+    scene.add(sun);
+
+    // Planetas (dados reduzidos e estilizados — você pode ampliar)
+    const planets = [];
+    const planetDefs = [
+        { name: 'Mercúrio', size: 0.12, distance: 2.6, color: 0x8C7853, speed: 0.012, desc: 'Menor planeta.' , meta: 'Dist: 57,9M km • Dia: 59 dias'},
+        { name: 'Vênus', size: 0.2, distance: 3.6, color: 0xFFA500, speed: 0.009, desc: 'Planeta extremamente quente.' , meta: 'Dist: 108M km • Dia: 243 dias'},
+        { name: 'Terra', size: 0.21, distance: 4.6, color: 0x2E86FF, speed: 0.007, desc: 'Nosso lar, com vida.', meta: 'Dist: 149M km • Lua: 1'},
+        { name: 'Marte', size: 0.16, distance: 5.6, color: 0xFF4500, speed: 0.006, desc: 'O planeta vermelho.', meta: 'Dist: 228M km • Lua: 2'},
+        { name: 'Júpiter', size: 0.45, distance: 7.8, color: 0xD4A017, speed: 0.004, desc: 'Gigante gasoso.', meta: 'Dist: 778M km • Muitas luas'},
+        { name: 'Saturno', size: 0.38, distance: 9.6, color: 0xEFD5A5, speed: 0.003, desc: 'Conhecido por seus anéis.', meta: 'Dist: 1,4B km • Anéis visíveis'}
+    ];
+
+    planetDefs.forEach(d => {
+        const g = new THREE.Group();
+        const geo = new THREE.SphereGeometry(d.size, 32, 32);
+        const mat = new THREE.MeshStandardMaterial({ color: d.color, roughness: 0.8 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(d.distance, 0, 0);
+        mesh.userData = { name: d.name, description: d.desc, curiosity: d.meta };
+
+        // Órbita visual
+        const orbitGeo = new THREE.RingGeometry(d.distance - 0.01, d.distance + 0.01, 64);
+        const orbitMat = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
+        const orbit = new THREE.Mesh(orbitGeo, orbitMat);
+        orbit.rotation.x = -Math.PI/2;
+        scene.add(orbit);
+
+        g.add(mesh);
+        scene.add(g);
+        planets.push({ group: g, mesh: mesh, def: d, angle: Math.random() * Math.PI * 2 });
+    });
+
+    // Raycaster (usado para detectar o que a cabeça está olhando)
+    const raycaster = new THREE.Raycaster();
+    const tempVec = new THREE.Vector3();
+
+    // DOM Info
+    const planetInfoDOM = document.getElementById('planet-info-dom');
+    const pname = document.getElementById('pname');
+    const pdesc = document.getElementById('pdesc');
+    const pmeta = document.getElementById('pmeta');
+    document.getElementById('close-info').addEventListener('click', () => { planetInfoDOM.style.display = 'none'; });
+
+    // Pequeno helper para mostrar reticle 2d (útil para visualização em desktop)
+    const reticle2d = document.getElementById('reticle-2d');
+    document.getElementById('show-2d-reticle').addEventListener('click', () => { reticle2d.style.display = (reticle2d.style.display === 'none') ? 'block' : 'none'; });
+
+    // Animação de órbitas
+    function updateOrbits(delta) {
+        planets.forEach(p => {
+            p.angle += p.def.speed * delta * 60; // ajuste de velocidade
+            const x = Math.cos(p.angle) * p.def.distance;
+            const z = Math.sin(p.angle) * p.def.distance;
+            p.mesh.position.set(x, 0, z);
+            // girando o próprio planeta
+            p.mesh.rotation.y += 0.01;
+        });
+        sun.rotation.y += 0.002 * delta * 60;
+    }
+
+    // Função que calcula onde o marcador na fronte está apontando
+    function updateGazeInteraction() {
+        // A posição "olho" real em world-space — usamos gerenciador XR quando em sessão
+        let xrCamera = renderer.xr.getCamera();
+        let origin = new THREE.Vector3();
+        let dir = new THREE.Vector3(0,0,-1);
+
+        if (renderer.xr.isPresenting) {
+            // xrCamera é um ArrayCamera; pegar a câmera principal (0)
+            origin.setFromMatrixPosition(xrCamera.cameras[0].matrixWorld);
+            // Direção: usar a rotação do head group (aqui assumimos que o head está alinhado com a câmera XR local)
+            const camQuaternion = new THREE.Quaternion();
+            xrCamera.cameras[0].getWorldQuaternion(camQuaternion);
+            dir.applyQuaternion(camQuaternion);
+        } else {
+            // fallback desktop: usar camera normal
+            origin.copy(head.getWorldPosition(new THREE.Vector3()));
+            const quat = head.getWorldQuaternion(new THREE.Quaternion());
+            dir.set(0,0,-1).applyQuaternion(quat);
         }
 
-        function setupButtons() {
-            document.getElementById('vr-button').onclick = toggleSimulatedVR;
-            document.getElementById('stereo-button').onclick = toggleStereoVR;
-            document.getElementById('pause-button').onclick = () => {
-                isPaused = !isPaused;
-                const btn = document.getElementById('pause-button');
-                btn.textContent = isPaused ? '▶️ Continuar' : '⏸️ Pausar';
-                btn.classList.toggle('paused');
-            };
+        raycaster.set(origin, dir);
+        const meshes = planets.map(p => p.mesh).concat([sun]);
+        const intersects = raycaster.intersectObjects(meshes, false);
+
+        if (intersects.length > 0) {
+            const it = intersects[0];
+            // Posicionar reticle 3D sobre a superfície do objeto intersectado
+            gazeReticle.position.copy(it.point);
+            gazeReticle.visible = true;
+
+            // Mostrar o painel DOM com informações
+            const ud = it.object.userData;
+            if (ud && ud.name) {
+                pname.textContent = ud.name;
+                pdesc.textContent = ud.description || '';
+                pmeta.textContent = ud.curiosity || '';
+                planetInfoDOM.style.display = 'block';
+            }
+
+            // Realçar o planeta levemente (pequena escala de destaque)
+            it.object.scale.set(1.06,1.06,1.06);
+
+            // posicionar gráfico/indicador — opcional: animate marker to planet
+        } else {
+            gazeReticle.visible = false;
+            // reset highlights
+            planets.forEach(p => p.mesh.scale.set(1,1,1));
+            // oculta DOM info após 1.5s
+            if (planetInfoDOM.style.display === 'block') {
+                // deixamos visível por enquanto; você pode ocultar com timeout se preferir
+            }
         }
-        
-        function setupMobileControls() {
-            const joystick = document.getElementById('joystick');
-            const stick = document.getElementById('joystick-stick');
-            
-            joystick.addEventListener('touchstart', (e) => { 
-                e.preventDefault(); 
-                joystickActive = true; 
-            }, { passive: false });
-            
-            joystick.addEventListener('touchmove', (e) => {
-                if (!joystickActive) return;
-                e.preventDefault();
-                
-                const touch = e.touches[0];
-                const rect = joystick.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                let deltaX = touch.clientX - centerX;
-                let deltaY = touch.clientY - centerY;
-                const maxDistance = 35;
-                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                if (distance > maxDistance) {
-                    deltaX = (deltaX / distance) * maxDistance;
-                    deltaY = (deltaY / distance) * maxDistance;
-                }
-                joystickVector.x = deltaX / maxDistance;
-                joystickVector.y = deltaY / maxDistance;
-                stick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            }, { passive: false });
-            
-            joystick.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                joystickActive = false;
-                joystickVector = { x: 0, y: 0 };
-                stick.style.transform = 'translate(0, 0)';
-            }, { passive: false });
-            
-            const btnUp = document.getElementById('btn-up');
-            const btnDown = document.getElementById('btn-down');
-            
-            btnUp.addEventListener('touchstart', (e) => { e.preventDefault(); keys['Space'] = true; }, { passive: false });
-            btnUp.addEventListener('touchend', (e) => { e.preventDefault(); keys['Space'] = false; }, { passive: false });
-            btnDown.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ShiftLeft'] = true; }, { passive: false });
-            btnDown.addEventListener('touchend', (e) => { e.preventDefault(); keys['ShiftLeft'] = false; }, { passive: false });
+    }
+
+    // Torna o ponto 'foreheadMarker' seguir a câmera XR automaticamente.
+    // Quando em sessão XR, atualizamos a posição do 'head' para acompanhar a câmera.
+    function syncHeadToXR() {
+        if (renderer.xr.isPresenting) {
+            const xrCam = renderer.xr.getCamera();
+            // Pegar posição do primeiro sub-câmera (esquerdo/direito)
+            const worldPos = new THREE.Vector3();
+            worldPos.setFromMatrixPosition(xrCam.cameras[0].matrixWorld);
+            head.position.copy(worldPos);
+            // Copiar rotação do xr camera para o head
+            const worldQuat = new THREE.Quaternion();
+            xrCam.cameras[0].getWorldQuaternion(worldQuat);
+            head.quaternion.copy(worldQuat);
+        } else {
+            // head segue a 'camera' normal
+            head.position.copy(camera.position);
+            head.quaternion.copy(camera.quaternion);
         }
-        
-        function grantOrientation() {
-            requestOrientationPermission();
-            document.getElementById('orientation-prompt').classList.remove('visible');
-        }
-        
-        async function requestOrientationPermission() {
-            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    }
+
+    // Botão "Entrar em VR" — tenta iniciar uma sessão WebXR de imersão
+    const enterVRBtn = document.getElementById('enter-vr');
+    async function initXR() {
+        if (navigator.xr) {
+            const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
+            if (!isSupported) {
+                enterVRBtn.textContent = 'VR não suportado';
+                enterVRBtn.disabled = true;
+                return;
+            }
+
+            enterVRBtn.addEventListener('click', async () => {
                 try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission === 'granted') {
-                        orientationPermission = true;
-                        setupDeviceOrientation();
-                    }
-                } catch (error) {
-                    orientationPermission = true;
-                    setupDeviceOrientation();
-                }
-            } else {
-                orientationPermission = true;
-                setupDeviceOrientation();
-            }
-        }
-        
-        function setupDeviceOrientation() {
-            let initialAlpha = null;
-            let isLandscape = window.innerWidth > window.innerHeight;
-            
-            window.addEventListener('deviceorientation', (event) => {
-                if (!stereoMode || event.alpha === null) return;
-                
-                // Detectar orientação da tela
-                const wasLandscape = isLandscape;
-                isLandscape = window.innerWidth > window.innerHeight;
-                
-                // Reset ao mudar orientação
-                if (wasLandscape !== isLandscape) {
-                    initialAlpha = null;
-                }
-                
-                // Capturar alpha inicial para manter referência frontal
-                if (initialAlpha === null) {
-                    initialAlpha = event.alpha;
-                }
-                
-                // Calcular ângulos relativos ao inicial
-                const alphaRelative = event.alpha - initialAlpha;
-                const alpha = THREE.MathUtils.degToRad(alphaRelative);
-                const beta = THREE.MathUtils.degToRad(event.beta || 0);
-                const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
-                
-                let euler;
-                
-                if (isLandscape) {
-                    // HORIZONTAL - Ajustar para que frente seja frente
-                    // Quando deitado, beta controla olhar para cima/baixo
-                    // gamma controla rotação lateral (esquerda/direita)
-                    euler = new THREE.Euler(
-                        gamma,           // Pitch (cima/baixo)
-                        alpha,           // Yaw (esquerda/direita) 
-                        beta - Math.PI/2, // Roll (inclinação)
-                        'YXZ'
-                    );
-                } else {
-                    // VERTICAL - Modo padrão
-                    euler = new THREE.Euler(
-                        beta - Math.PI/2,
-                        alpha,
-                        -gamma,
-                        'YXZ'
-                    );
-                }
-                
-                const deviceQuat = new THREE.Quaternion().setFromEuler(euler);
-                
-                // Aplicar às câmeras
-                cameraLeft.quaternion.copy(deviceQuat);
-                cameraRight.quaternion.copy(deviceQuat);
-            }, true);
-            
-            // Detectar mudança de orientação da tela
-            window.addEventListener('orientationchange', () => {
-                setTimeout(() => {
-                    initialAlpha = null;
-                    
-                    // Reposicionar câmeras ao mudar orientação
-                    const isLandscape = window.innerWidth > window.innerHeight;
-                    
-                    if (isLandscape) {
-                        cameraLeft.position.set(-eyeSeparation / 2, 2, 18);
-                        cameraRight.position.set(eyeSeparation / 2, 2, 18);
-                    } else {
-                        cameraLeft.position.set(-eyeSeparation / 2, 2, 12);
-                        cameraRight.position.set(eyeSeparation / 2, 2, 12);
-                    }
-                    
-                    cameraLeft.lookAt(0, 2, 0);
-                    cameraRight.lookAt(0, 2, 0);
-                }, 500);
-            });
-        }
-        
-        function closeInstructions() { 
-            document.getElementById('vr-instructions').classList.remove('visible'); 
-        }
-        
-        function toggleStereoVR() {
-            if (vrMode) toggleSimulatedVR();
-            stereoMode = !stereoMode;
-            const btn = document.getElementById('stereo-button');
-            
-            if (stereoMode) {
-                btn.textContent = '🚪 Sair VR';
-                btn.classList.add('stereo-mode');
-                document.getElementById('main-container').style.display = 'none';
-                document.getElementById('left-eye').classList.add('active');
-                document.getElementById('right-eye').classList.add('active');
-                document.getElementById('stereo-divider').classList.add('active');
-                document.getElementById('info').style.display = 'none';
-                
-                const basePos = new THREE.Vector3(0, 5, 20);
-                
-                // Posições fixas com separação estereoscópica
-                // Câmeras mais próximas e melhor posicionadas
-                cameraLeft.position.set(-eyeSeparation / 2, 2, 12);
-                cameraRight.position.set(eyeSeparation / 2, 2, 12);
-                
-                // Apontar ambas as câmeras para o centro do sistema solar
-                cameraLeft.lookAt(0, 2, 0);
-                cameraRight.lookAt(0, 2, 0);
-                
-                // Garantir que começam com rotação neutra
-                cameraLeft.rotation.order = 'YXZ';
-                cameraRight.rotation.order = 'YXZ';
-                
-                if (!orientationPermission) {
-                    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        document.getElementById('orientation-prompt').classList.add('visible');
-                    } else {
-                        requestOrientationPermission();
-                    }
-                }
-                
-            } else {
-                btn.textContent = '🥽 VR Óculos';
-                btn.classList.remove('stereo-mode');
-                document.getElementById('main-container').style.display = 'block';
-                document.getElementById('left-eye').classList.remove('active');
-                document.getElementById('right-eye').classList.remove('active');
-                document.getElementById('stereo-divider').classList.remove('active');
-                document.getElementById('info').style.display = 'block';
-                document.getElementById('vr-instructions').classList.remove('visible');
-                camera.position.set(0, 5, 20);
-                camera.lookAt(0, 0, 0);
-            }
-        }
-        
-        function updateStereoMovement() {
-            if (!stereoMode) return;
-            // Cameras ficam fixas - apenas giroscópio controla rotação
-        }
-        
-        function checkStereoIntersection() {
-            if (!stereoMode) return;
-            
-            const planetInfo = document.getElementById('planet-info');
-            if (!planetInfo) return;
-            
-            // Usar câmera esquerda para raycasting
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), cameraLeft);
-            const planetMeshes = planets.map(p => p.planet);
-            const allObjects = [...planetMeshes, sun];
-            const intersects = raycaster.intersectObjects(allObjects, true);
-            
-            if (intersects.length > 0) {
-                let obj = intersects[0].object;
-                while (obj && !obj.userData.name) obj = obj.parent;
-                
-                if (obj && obj.userData.name) {
-                    const nameEl = document.getElementById('planet-name');
-                    const descEl = document.getElementById('planet-description');
-                    const distEl = document.getElementById('planet-distance');
-                    const sizeEl = document.getElementById('planet-size');
-                    const orbitalEl = document.getElementById('planet-orbital');
-                    const dayEl = document.getElementById('planet-day');
-                    const moonsEl = document.getElementById('planet-moons');
-                    const curiosityEl = document.getElementById('planet-curiosity');
-                    
-                    if (nameEl) nameEl.textContent = obj.userData.name;
-                    if (descEl) descEl.textContent = obj.userData.description;
-                    if (distEl) distEl.textContent = '📍 ' + obj.userData.realDistance;
-                    if (sizeEl) sizeEl.textContent = '🌐 ' + obj.userData.realSize;
-                    if (orbitalEl) orbitalEl.textContent = '🔄 ' + obj.userData.orbitalPeriod;
-                    if (dayEl) dayEl.textContent = '⏰ ' + obj.userData.dayLength;
-                    if (moonsEl) moonsEl.textContent = '🌙 ' + obj.userData.moons;
-                    if (curiosityEl) curiosityEl.textContent = obj.userData.curiosity;
-                    
-                    planetInfo.style.display = 'block';
-                    
-                    if (planetInfoTimer) clearTimeout(planetInfoTimer);
-                }
-            } else {
-                if (planetInfo.style.display === 'block' && !planetInfoTimer) {
-                    planetInfoTimer = setTimeout(() => {
-                        planetInfo.style.display = 'none';
-                        planetInfoTimer = null;
-                    }, 3000);
-                }
-            }
-        }
-
-        function toggleSimulatedVR() {
-            if (stereoMode) toggleStereoVR();
-            vrMode = !vrMode;
-            const btn = document.getElementById('vr-button');
-            
-            if (vrMode) {
-                btn.textContent = '🚪 Sair VR';
-                btn.classList.add('vr-mode');
-                document.getElementById('crosshair').classList.add('active');
-                document.getElementById('info').style.opacity = '0.3';
-                camera.position.set(0, 5, 15);
-                camera.rotation.set(0, 0, 0);
-                camera.lookAt(0, 0, 0);
-                document.addEventListener('keydown', onKeyDown);
-                document.addEventListener('keyup', onKeyUp);
-                document.addEventListener('mousemove', onVRMouseMove);
-                document.addEventListener('click', () => {
-                    if (document.body.requestPointerLock) document.body.requestPointerLock();
-                });
-            } else {
-                btn.textContent = '🎮 VR Simulado';
-                btn.classList.remove('vr-mode');
-                document.getElementById('crosshair').classList.remove('active');
-                document.getElementById('info').style.opacity = '1';
-                document.getElementById('planet-info').style.display = 'none';
-                document.removeEventListener('keydown', onKeyDown);
-                document.removeEventListener('keyup', onKeyUp);
-                document.removeEventListener('mousemove', onVRMouseMove);
-                if (document.exitPointerLock) document.exitPointerLock();
-                camera.position.set(0, 5, 20);
-                camera.rotation.set(0, 0, 0);
-                camera.lookAt(0, 0, 0);
-            }
-        }
-
-        function onKeyDown(e) { keys[e.code] = true; }
-        function onKeyUp(e) { keys[e.code] = false; }
-
-        function onVRMouseMove(e) {
-            if (!vrMode) return;
-            camera.rotation.y -= (e.movementX || 0) * 0.002;
-            camera.rotation.x -= (e.movementY || 0) * 0.002;
-            camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-        }
-
-        function updateVRMovement() {
-            if (!vrMode) return;
-            const dir = new THREE.Vector3();
-            if (keys['KeyW']) { camera.getWorldDirection(dir); camera.position.add(dir.multiplyScalar(moveSpeed)); }
-            if (keys['KeyS']) { camera.getWorldDirection(dir); camera.position.add(dir.multiplyScalar(-moveSpeed)); }
-            if (keys['KeyA']) { camera.getWorldDirection(dir); const left = new THREE.Vector3().crossVectors(camera.up, dir); camera.position.add(left.normalize().multiplyScalar(moveSpeed)); }
-            if (keys['KeyD']) { camera.getWorldDirection(dir); const right = new THREE.Vector3().crossVectors(dir, camera.up); camera.position.add(right.normalize().multiplyScalar(moveSpeed)); }
-            if (keys['Space']) camera.position.y += moveSpeed;
-            if (keys['ShiftLeft']) camera.position.y -= moveSpeed;
-        }
-
-        function checkPlanetIntersection() {
-            if (!vrMode) return;
-            
-            const planetInfo = document.getElementById('planet-info');
-            if (!planetInfo) return; // Verifica se o elemento existe
-            
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const planetMeshes = planets.map(p => p.planet);
-            const allObjects = [...planetMeshes, sun];
-            const intersects = raycaster.intersectObjects(allObjects, true);
-            
-            if (intersects.length > 0) {
-                let obj = intersects[0].object;
-                while (obj && !obj.userData.name) obj = obj.parent;
-                
-                if (obj && obj.userData.name) {
-                    const nameEl = document.getElementById('planet-name');
-                    const descEl = document.getElementById('planet-description');
-                    const distEl = document.getElementById('planet-distance');
-                    const sizeEl = document.getElementById('planet-size');
-                    const orbitalEl = document.getElementById('planet-orbital');
-                    const dayEl = document.getElementById('planet-day');
-                    const moonsEl = document.getElementById('planet-moons');
-                    const curiosityEl = document.getElementById('planet-curiosity');
-                    
-                    if (nameEl) nameEl.textContent = obj.userData.name;
-                    if (descEl) descEl.textContent = obj.userData.description;
-                    if (distEl) distEl.textContent = '📍 ' + obj.userData.realDistance;
-                    if (sizeEl) sizeEl.textContent = '🌐 ' + obj.userData.realSize;
-                    if (orbitalEl) orbitalEl.textContent = '🔄 ' + obj.userData.orbitalPeriod;
-                    if (dayEl) dayEl.textContent = '⏰ ' + obj.userData.dayLength;
-                    if (moonsEl) moonsEl.textContent = '🌙 ' + obj.userData.moons;
-                    if (curiosityEl) curiosityEl.textContent = obj.userData.curiosity;
-                    
-                    planetInfo.style.display = 'block';
-                    
-                    if (planetInfoTimer) clearTimeout(planetInfoTimer);
-                }
-            } else {
-                if (planetInfo.style.display === 'block' && !planetInfoTimer) {
-                    planetInfoTimer = setTimeout(() => {
-                        planetInfo.style.display = 'none';
-                        planetInfoTimer = null;
-                    }, 3000);
-                }
-            }
-        }
-
-        function createSolarSystem() {
-            createStarField();
-            const sunGeo = new THREE.SphereGeometry(2, 32, 32);
-            const sunMat = new THREE.MeshBasicMaterial({ color: 0xFFD700, emissive: 0xFFAA00 });
-            sun = new THREE.Mesh(sunGeo, sunMat);
-            sun.userData = {
-                name: 'Sol',
-                description: 'A estrela no centro do Sistema Solar',
-                realDistance: 'Centro do Sistema',
-                realSize: '1.392.700 km',
-                orbitalPeriod: 'N/A',
-                dayLength: '~25 dias',
-                moons: '8 planetas',
-                curiosity: '⭐ 99,86% da massa do Sistema Solar!'
-            };
-            scene.add(sun);
-            
-            const planetData = [
-                { name: 'Mercúrio', size: 0.3, distance: 4, color: 0x8C7853, speed: 0.01 },
-                { name: 'Vênus', size: 0.5, distance: 6, color: 0xFFA500, speed: 0.0075 },
-                { name: 'Terra', size: 0.6, distance: 8, color: 0x4169E1, speed: 0.005, hasMoon: true },
-                { name: 'Marte', size: 0.4, distance: 10, color: 0xFF4500, speed: 0.004 },
-                { name: 'Júpiter', size: 1.2, distance: 15, color: 0xDAA520, speed: 0.0025 },
-                { name: 'Saturno', size: 1.0, distance: 18, color: 0xFAD5A5, speed: 0.002, hasRings: true }
-            ];
-            
-            planetData.forEach(data => { 
-                const p = createPlanet(data);
-                planets.push(p); 
-                scene.add(p.group); 
-            });
-        }
-
-        function createPlanet(data) {
-            const group = new THREE.Group();
-            const orbitGeo = new THREE.RingGeometry(data.distance - 0.1, data.distance + 0.1, 64);
-            const orbitMat = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
-            const orbit = new THREE.Mesh(orbitGeo, orbitMat);
-            orbit.rotation.x = -Math.PI / 2;
-            group.add(orbit);
-            
-            const planetGeo = new THREE.SphereGeometry(data.size, 32, 32);
-            const planetMat = new THREE.MeshLambertMaterial({ color: data.color });
-            const planetMesh = new THREE.Mesh(planetGeo, planetMat);
-            planetMesh.position.x = data.distance;
-            
-            // Dados dos planetas
-            const planetInfo = {
-                'Mercúrio': { desc: 'Menor planeta do Sistema Solar', dist: '57,9 milhões km', size: '4.879 km', orbital: '88 dias', day: '59 dias', moons: '0', curiosity: '🌡️ Varia de -173°C a 427°C!' },
-                'Vênus': { desc: 'O planeta mais quente', dist: '108,2 milhões km', size: '12.104 km', orbital: '225 dias', day: '243 dias', moons: '0', curiosity: '🔥 465°C - efeito estufa extremo!' },
-                'Terra': { desc: 'Nosso lar, único com vida', dist: '149,6 milhões km', size: '12.742 km', orbital: '365,25 dias', day: '24 horas', moons: '1', curiosity: '🌍 70% coberta por água!' },
-                'Marte': { desc: 'O planeta vermelho', dist: '227,9 milhões km', size: '6.779 km', orbital: '687 dias', day: '24,6 horas', moons: '2', curiosity: '🔴 Monte Olimpo - maior vulcão!' },
-                'Júpiter': { desc: 'O maior planeta', dist: '778,5 milhões km', size: '139.820 km', orbital: '12 anos', day: '10 horas', moons: '95', curiosity: '🌪️ Tempestade há 400 anos!' },
-                'Saturno': { desc: 'Famoso pelos anéis', dist: '1,4 bilhão km', size: '116.460 km', orbital: '29 anos', day: '10,7 horas', moons: '146', curiosity: '💍 Flutuaria na água!' }
-            };
-            
-            const info = planetInfo[data.name];
-            planetMesh.userData = {
-                name: data.name,
-                description: info.desc,
-                realDistance: info.dist,
-                realSize: info.size,
-                orbitalPeriod: info.orbital,
-                dayLength: info.day,
-                moons: info.moons,
-                curiosity: info.curiosity
-            };
-            
-            group.add(planetMesh);
-            
-            if (data.hasMoon) {
-                const moonGeo = new THREE.SphereGeometry(data.size * 0.27, 16, 16);
-                const moonMat = new THREE.MeshLambertMaterial({ color: 0xAAAAAA });
-                const moon = new THREE.Mesh(moonGeo, moonMat);
-                moon.position.x = data.size * 2;
-                moon.userData = {
-                    name: 'Lua',
-                    description: 'Satélite natural da Terra',
-                    realDistance: '384.400 km',
-                    realSize: '3.474 km',
-                    orbitalPeriod: '27,3 dias',
-                    dayLength: '27,3 dias',
-                    moons: 'Satélite',
-                    curiosity: '🌙 Sempre mostra a mesma face!'
-                };
-                planetMesh.add(moon);
-            }
-            
-            if (data.hasRings) {
-                const ringGeo = new THREE.RingGeometry(data.size * 1.2, data.size * 1.8, 32);
-                const ringMat = new THREE.MeshLambertMaterial({ color: 0xC4A484, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
-                const ring = new THREE.Mesh(ringGeo, ringMat);
-                ring.rotation.x = -Math.PI / 2;
-                planetMesh.add(ring);
-            }
-            
-            return { group: group, planet: planetMesh, data: data, angle: Math.random() * Math.PI * 2 };
-        }
-
-        function createStarField() {
-            const starGeo = new THREE.BufferGeometry();
-            const positions = new Float32Array(30000);
-            for (let i = 0; i < 30000; i++) positions[i] = (Math.random() - 0.5) * 2000;
-            starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.5 }));
-            scene.add(stars);
-        }
-
-        function addLights() {
-            const sunLight = new THREE.PointLight(0xFFFFFF, 2, 100);
-            sunLight.castShadow = true;
-            scene.add(sunLight);
-            scene.add(new THREE.AmbientLight(0x404040, 0.1));
-        }
-
-        function addMouseControls() {
-            document.addEventListener('mousemove', (e) => {
-                if (!vrMode && !stereoMode) {
-                    const mx = (e.clientX / window.innerWidth) * 2 - 1;
-                    const my = -(e.clientY / window.innerHeight) * 2 + 1;
-                    camera.position.x = Math.sin(mx * Math.PI) * 25;
-                    camera.position.z = Math.cos(mx * Math.PI) * 25;
-                    camera.position.y = my * 10 + 5;
-                    camera.lookAt(0, 0, 0);
+                    const session = await navigator.xr.requestSession('immersive-vr', { requiredFeatures: ['local-floor'] });
+                    renderer.xr.setSession(session);
+                } catch (err) {
+                    console.warn('Falha ao iniciar sessão XR:', err);
+                    alert('Não foi possível iniciar a sessão VR. Verifique o headset e o navegador.');
                 }
             });
-            
-            document.addEventListener('wheel', (e) => {
-                if (!vrMode && !stereoMode) {
-                    const dist = camera.position.length();
-                    const newDist = Math.max(5, Math.min(50, dist + e.deltaY * 0.01));
-                    camera.position.normalize().multiplyScalar(newDist);
-                }
-            });
+        } else {
+            enterVRBtn.textContent = 'WebXR não disponível';
+            enterVRBtn.disabled = true;
         }
+    }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            updateVRMovement();
-            updateStereoMovement();
-            checkPlanetIntersection();
-            checkStereoIntersection();
-            
-            if (!isPaused) {
-                sun.rotation.y += 0.002;
-                planets.forEach(p => {
-                    p.angle += p.data.speed;
-                    p.planet.position.x = Math.cos(p.angle) * p.data.distance;
-                    p.planet.position.z = Math.sin(p.angle) * p.data.distance;
-                    p.planet.rotation.y += 0.005;
-                });
-            }
-            
-            if (stereoMode) {
-                rendererLeft.render(scene, cameraLeft);
-                rendererRight.render(scene, cameraRight);
-            } else {
-                renderer.render(scene, camera);
-            }
-        }
+    initXR();
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            
-            const aspect = window.innerWidth / (2 * window.innerHeight);
-            cameraLeft.aspect = aspect;
-            cameraRight.aspect = aspect;
-            cameraLeft.updateProjectionMatrix();
-            cameraRight.updateProjectionMatrix();
-            
-            if (stereoMode) {
-                rendererLeft.setSize(window.innerWidth / 2, window.innerHeight);
-                rendererRight.setSize(window.innerWidth / 2, window.innerHeight);
-            }
+    // Interação: apontar/controlar com o controlador (opcional) — adiciona reticle quando controlador disponível
+    const controller = renderer.xr.getController(0);
+    controller.addEventListener('select', () => {
+        // Ao pressionar o gatilho enquanto olha para um planeta, podemos travar info ou aproximar
+        if (gazeReticle.visible) {
+            // Exemplo: ocultar/mostrar informação DOM já tratado por gaze
         }
+    });
+    scene.add(controller);
+
+    // Resize handler
+    window.addEventListener('resize', () => {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+    });
+
+    // loop principal — usando renderer.setAnimationLoop para compatibilidade XR
+    let lastTime = performance.now();
+    renderer.setAnimationLoop((time) => {
+        const delta = (time - lastTime) / 1000;
+        lastTime = time;
+
+        // atualizar órbitas
+        updateOrbits(delta);
+
+        // sincronizar head com câmera XR (manter a marca na fronte alinhada)
+        syncHeadToXR();
+
+        // raycast a partir do ponto de vista da "testa" / cabeça
+        updateGazeInteraction();
+
+        // render
+        if (renderer.xr.isPresenting) {
+            renderer.render(scene, camera); // quando em XR, o renderer substitui a câmera automaticamente
+        } else {
+            renderer.render(scene, camera);
+        }
+    });
+
+    // Mostrar reticle 2D para testes em desktop
+    // O reticle 2D fica no centro da tela — replicando olhando com a testa
+    function updateReticle2DVisibility() {
+        // se não estiver em XR, mostra o reticle 2D por conveniência
+        if (!renderer.xr.isPresenting) {
+            document.getElementById('show-2d-reticle').style.display = 'inline-block';
+        } else {
+            document.getElementById('show-2d-reticle').style.display = 'none';
+        }
+    }
+    updateReticle2DVisibility();
+
+    // Ativar pequenos controles (mouse) para testar sem óculos
+    let isPointerDown = false;
+    let lastX = 0, lastY = 0;
+    window.addEventListener('pointerdown', (e) => { isPointerDown = true; lastX = e.clientX; lastY = e.clientY; });
+    window.addEventListener('pointerup', () => { isPointerDown = false; });
+    window.addEventListener('pointermove', (e) => {
+        if (!isPointerDown || renderer.xr.isPresenting) return;
+        const dx = (e.clientX - lastX) * 0.002;
+        const dy = (e.clientY - lastY) * 0.002;
+        camera.rotation.y -= dx;
+        camera.rotation.x -= dy;
+        camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+        lastX = e.clientX; lastY = e.clientY;
+    });
+
+    // DEBUG: Exibir posição inicial dos objetos no console (útil para desenvolvimento)
+    console.log('Planetas inicializados:', planets.map(p => p.mesh.userData.name));
+
+    // Ao entrar/sair de sessão XR, ajustar UI e visibilidade do reticle 2D
+    renderer.xr.addEventListener('sessionstart', () => {
+        enterVRBtn.classList.add('hidden');
+        document.getElementById('info-floating').style.display = 'none';
+        reticle2d.style.display = 'none';
+    });
+    renderer.xr.addEventListener('sessionend', () => {
+        enterVRBtn.classList.remove('hidden');
+        document.getElementById('info-floating').style.display = 'block';
+        updateReticle2DVisibility();
+    });
+
+    // Acessibilidade: permitir foco no planeta por clique no DOM (útil para desktop)
+    document.getElementById('ui-overlay').addEventListener('click', (e) => {
+        // placeholder
+    });
+
     </script>
 </body>
 </html>
