@@ -240,36 +240,52 @@
         }
         
         function setupDeviceOrientation() {
-            let initialOrientation = null;
+            let initialAlpha = null;
             let isLandscape = window.innerWidth > window.innerHeight;
             
             window.addEventListener('deviceorientation', (event) => {
-                if (!stereoMode || !event.alpha) return;
+                if (!stereoMode || event.alpha === null) return;
                 
                 // Detectar orientação da tela
+                const wasLandscape = isLandscape;
                 isLandscape = window.innerWidth > window.innerHeight;
                 
-                // Capturar orientação inicial para referência
-                if (!initialOrientation) {
-                    initialOrientation = {
-                        alpha: event.alpha,
-                        beta: event.beta,
-                        gamma: event.gamma
-                    };
+                // Reset ao mudar orientação
+                if (wasLandscape !== isLandscape) {
+                    initialAlpha = null;
                 }
                 
-                const alpha = THREE.MathUtils.degToRad(event.alpha || 0);
+                // Capturar alpha inicial para manter referência frontal
+                if (initialAlpha === null) {
+                    initialAlpha = event.alpha;
+                }
+                
+                // Calcular ângulos relativos ao inicial
+                const alphaRelative = event.alpha - initialAlpha;
+                const alpha = THREE.MathUtils.degToRad(alphaRelative);
                 const beta = THREE.MathUtils.degToRad(event.beta || 0);
                 const gamma = THREE.MathUtils.degToRad(event.gamma || 0);
                 
                 let euler;
                 
                 if (isLandscape) {
-                    // Modo HORIZONTAL (landscape) - girar 90° para compensar
-                    euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma + Math.PI/2, 'YXZ');
+                    // HORIZONTAL - Ajustar para que frente seja frente
+                    // Quando deitado, beta controla olhar para cima/baixo
+                    // gamma controla rotação lateral (esquerda/direita)
+                    euler = new THREE.Euler(
+                        gamma,           // Pitch (cima/baixo)
+                        alpha,           // Yaw (esquerda/direita) 
+                        beta - Math.PI/2, // Roll (inclinação)
+                        'YXZ'
+                    );
                 } else {
-                    // Modo VERTICAL (portrait)
-                    euler = new THREE.Euler(beta - Math.PI/2, alpha, -gamma, 'YXZ');
+                    // VERTICAL - Modo padrão
+                    euler = new THREE.Euler(
+                        beta - Math.PI/2,
+                        alpha,
+                        -gamma,
+                        'YXZ'
+                    );
                 }
                 
                 const deviceQuat = new THREE.Quaternion().setFromEuler(euler);
@@ -282,7 +298,21 @@
             // Detectar mudança de orientação da tela
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => {
-                    initialOrientation = null; // Resetar orientação inicial
+                    initialAlpha = null;
+                    
+                    // Reposicionar câmeras ao mudar orientação
+                    const isLandscape = window.innerWidth > window.innerHeight;
+                    
+                    if (isLandscape) {
+                        cameraLeft.position.set(-eyeSeparation / 2, 2, 18);
+                        cameraRight.position.set(eyeSeparation / 2, 2, 18);
+                    } else {
+                        cameraLeft.position.set(-eyeSeparation / 2, 2, 12);
+                        cameraRight.position.set(eyeSeparation / 2, 2, 12);
+                    }
+                    
+                    cameraLeft.lookAt(0, 2, 0);
+                    cameraRight.lookAt(0, 2, 0);
                 }, 500);
             });
         }
